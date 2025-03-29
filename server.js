@@ -8,6 +8,8 @@ const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const connectDB = require('./src/config/Db');
 const adminRoutes = require('./src/routes/adminRoutes');
+const productRoutes = require('./src/routes/productRoutes');
+const categoryRoutes = require('./src/routes/categoryRoutes');
 
 // Load environment variables
 dotenv.config();
@@ -55,6 +57,9 @@ const userRoutes = require('./src/routes/userRoutes');
 
 // Use routes
 app.use('/api/users', userRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/products', productRoutes);
+
 // app.use('/api/products', productRoutes);
 // app.use('/api/subscriptions', subscriptionRoutes);
 
