@@ -12,7 +12,7 @@ router.get('/discounted', productController.getDiscountedProducts);
 router.get('/category/:categoryId', productController.getProductsByCategory);
 router.get('/search', productController.searchProducts);
 router.get('/:slug', productController.getProductBySlug);
-router.get('/id/:id', productController.getProductById);
+// router.get('/id/:id', productController.getProductById);
 
 // Protected admin routes
 router.use(protect);
@@ -27,5 +27,7 @@ router.put('/:id/status', productController.updateProductStatus);
 router.put('/:id/feature', productController.toggleFeatureProduct);
 router.post('/:id/images', uploadMiddleware.array('images', 5), productController.addProductImages);
 router.delete('/:id/images/:imageId', productController.removeProductImage);
+
+router.get('/id/:id', productController.getProductById);
 
 module.exports = router;

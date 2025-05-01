@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
-const { protect } = require('../middlewares/authMiddleware');
+const { protect } = require('../middlewares/');
 const { isAdmin, hasPermission } = require('../middlewares/adminMiddleware');
 
 // Apply authentication and admin check to all routes
