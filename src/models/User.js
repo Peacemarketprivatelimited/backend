@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema(
   {
@@ -7,12 +8,20 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true },
     passwordHash: { type: String, required: true },
 
+    // Referral Code
+    referralCode: { 
+      type: String, 
+      unique: true,
+      sparse: true // Allows null values, uniqueness only on non-null
+    },
+    
     // Subscription Data
     subscription: {
       isActive: { type: Boolean, default: false },
       purchaseDate: { type: Date },
       expiryDate: { type: Date },
-      amountPaid: { type: Number, default: 0 }
+      amountPaid: { type: Number, default: 0 },
+      subscriptionId: { type: String } // For payment reference
     },
 
     // Referral System
@@ -78,5 +87,20 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Generate unique referral code for a user
+userSchema.methods.generateReferralCode = function() {
+  // Create a code based on user ID and a random string
+  const randomString = crypto.randomBytes(4).toString('hex').toUpperCase();
+  this.referralCode = `${this.username.substring(0, 3).toUpperCase()}${randomString}`;
+  return this.referralCode;
+};
+
+// Check if referral code is valid
+userSchema.methods.hasValidReferralCode = function() {
+  return this.subscription.isActive && 
+         this.subscription.expiryDate > new Date() &&
+         this.referralCode;
+};
 
 module.exports = mongoose.model("User", userSchema);

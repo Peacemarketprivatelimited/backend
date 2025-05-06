@@ -1,21 +1,24 @@
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const { generateToken, verifyToken } = require("../utils/jwt");
+const { updateReferralChain } = require("../utils/referralUtils");
 
 // Register a new user
 exports.register = async (req, res) => {
   try {
-    const { name, username, email, password, referrerId } = req.body;
+    const { name, username, email, password, referralCode } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findOne({
+    const userExists = await User.findOne({
       $or: [{ email }, { username }]
     });
 
-    if (existingUser) {
+    if (userExists) {
       return res.status(400).json({
         success: false,
-        message: existingUser.email === email ? "Email already in use" : "Username already taken"
+        message: userExists.email === email 
+          ? "Email is already registered" 
+          : "Username is already taken"
       });
     }
 
@@ -24,46 +27,34 @@ exports.register = async (req, res) => {
     const passwordHash = await bcrypt.hash(password, salt);
 
     // Create new user
-    const newUser = new User({
+    const newUser = await User.create({
       name,
       username,
       email,
-      passwordHash
+      passwordHash,
+      referral: {
+        level1: [],
+        level2: [],
+        level3: [],
+        level4: [],
+        level5: [],
+        level6: [],
+        level7: [],
+        level8: [],
+        level9: [],
+        level10: [],
+        earningsByLevel: {
+          level1: 0, level2: 0, level3: 0, level4: 0, level5: 0,
+          level6: 0, level7: 0, level8: 0, level9: 0, level10: 0
+        },
+        totalEarnings: 0
+      }
     });
 
-    // Handle referral if referrerId is provided
-    if (referrerId) {
-      const referrer = await User.findById(referrerId);
-      if (referrer) {
-        newUser.referral.referrer = referrerId;
-        
-        // Add new user to referrer's level1
-        await User.findByIdAndUpdate(referrerId, {
-          $push: { "referral.level1": newUser._id }
-        });
-        
-        // Handle upper levels (level2 to level10)
-        if (referrer.referral.referrer) {
-          await User.findByIdAndUpdate(referrer.referral.referrer, {
-            $push: { "referral.level2": newUser._id }
-          });
-          
-          // Find level3 referrer
-          const level2Referrer = await User.findById(referrer.referral.referrer);
-          if (level2Referrer && level2Referrer.referral.referrer) {
-            await User.findByIdAndUpdate(level2Referrer.referral.referrer, {
-              $push: { "referral.level3": newUser._id }
-            });
-            
-            // Continue for remaining levels...
-            // This pattern can be optimized with a recursive function for production
-            // ... (level4 through level10 would follow the same pattern)
-          }
-        }
-      }
+    // Process referral code if provided
+    if (referralCode) {
+      await updateReferralChain(newUser._id, referralCode);
     }
-
-    await newUser.save();
 
     // Generate JWT token
     const token = generateToken(newUser._id);
@@ -92,11 +83,21 @@ exports.register = async (req, res) => {
 // Login user
 exports.login = async (req, res) => {
   try {
-    const { login, password } = req.body;
+    const { login, username, password } = req.body;
+    
+    // Use login field if provided, otherwise fall back to username
+    const userIdentifier = login || username;
+    
+    if (!userIdentifier) {
+      return res.status(400).json({
+        success: false,
+        message: "Email or username is required"
+      });
+    }
 
     // Check if login is email or username
     const user = await User.findOne({
-      $or: [{ email: login.toLowerCase() }, { username: login.toLowerCase() }]
+      $or: [{ email: userIdentifier.toLowerCase() }, { username: userIdentifier.toLowerCase() }]
     });
 
     if (!user) {

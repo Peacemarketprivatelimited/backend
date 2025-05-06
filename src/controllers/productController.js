@@ -488,12 +488,20 @@ exports.updateProduct = async (req, res) => {
     if (quantity !== undefined) product.quantity = Number(quantity);
     
     // Update complex objects
-    if (discount) product.discount = JSON.parse(discount);
-    if (seo) product.seo = JSON.parse(seo);
-    if (attributes) product.attributes = JSON.parse(attributes);
-    if (shipping) product.shipping = JSON.parse(shipping);
-    if (status) product.status = JSON.parse(status);
+    // if (discount) product.discount = JSON.parse(discount);
+    // if (seo) product.seo = JSON.parse(seo);
+    // if (attributes) product.attributes = JSON.parse(attributes);
+    // if (shipping) product.shipping = JSON.parse(shipping);
+    // if (status) product.status = JSON.parse(status);
     
+    // Update complex objects
+    if (discount) product.discount = typeof discount === 'string' ? JSON.parse(discount) : discount;
+    if (seo) product.seo = typeof seo === 'string' ? JSON.parse(seo) : seo;
+    if (attributes) product.attributes = typeof attributes === 'string' ? JSON.parse(attributes) : attributes;
+    if (shipping) product.shipping = typeof shipping === 'string' ? JSON.parse(shipping) : shipping;
+    if (status) product.status = typeof status === 'string' ? JSON.parse(status) : status;
+
+
     // Set audit info
     product.audit.updatedBy = {
       _id: req.user.id,
