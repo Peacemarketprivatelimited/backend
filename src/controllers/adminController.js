@@ -1,69 +1,7 @@
 const User = require('../models/User');
 const Product = require('../models/Product');
-// const Category = require('../models/Category');
-// const Order = require('../models/Order');
-// const Subscription = require('../models/Subscription');
-// const Withdrawal = require('../models/Withdrawal');
+const Order = require('../models/Order');
 const mongoose = require('mongoose');
-
-// Dashboard stats
-// exports.getDashboardStats = async (req, res) => {
-//   try {
-//     // Get counts of key entities
-//     const userCount = await User.countDocuments();
-//     const productCount = await Product.countDocuments();
-//     const orderCount = await Order.countDocuments();
-//     const activeSubscriptions = await User.countDocuments({ 'subscription.isActive': true });
-    
-//     // Get pending withdrawals
-//     const pendingWithdrawals = await User.countDocuments({ 'withdrawals.pendingRequest': true });
-    
-//     // Get recent orders
-//     const recentOrders = await Order.find()
-//       .sort({ createdAt: -1 })
-//       .limit(5)
-//       .populate('user', 'name email');
-    
-//     // Get top selling products
-//     const topProducts = await Product.find()
-//       .sort({ sold: -1 })
-//       .limit(5);
-    
-//     // Get revenue stats
-//     const totalRevenue = await Order.aggregate([
-//       { $match: { status: 'completed' } },
-//       { $group: { _id: null, total: { $sum: '$totalAmount' } } }
-//     ]);
-    
-//     // Get subscription revenue
-//     const subscriptionRevenue = await User.aggregate([
-//       { $match: { 'subscription.isActive': true } },
-//       { $group: { _id: null, total: { $sum: '$subscription.amountPaid' } } }
-//     ]);
-    
-//     res.json({
-//       success: true,
-//       stats: {
-//         userCount,
-//         productCount,
-//         orderCount,
-//         activeSubscriptions,
-//         pendingWithdrawals,
-//         revenue: totalRevenue[0]?.total || 0,
-//         subscriptionRevenue: subscriptionRevenue[0]?.total || 0
-//       },
-//       recentOrders,
-//       topProducts
-//     });
-//   } catch (error) {
-//     console.error('Dashboard stats error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Error fetching dashboard statistics',
-//       error: error.message
-//     });
-//   }
-// };
 
 // USER MANAGEMENT
 exports.getAllUsers = async (req, res) => {
@@ -326,276 +264,234 @@ exports.changeUserRole = async (req, res) => {
   }
 };
 
-// PRODUCT MANAGEMENT
-// exports.getAllProducts = async (req, res) => {
-//   try {
-//     const {
-//       page = 1,
-//       limit = 10,
-//       search = '',
-//       category = '',
-//       sort = 'createdAt',
-//       order = 'desc',
-//       status = ''
-//     } = req.query;
-    
-//     // Build query
-//     const query = {};
-    
-//     // Add search filter
-//     if (search) {
-//       query.$or = [
-//         { name: { $regex: search, $options: 'i' } },
-//         { description: { $regex: search, $options: 'i' } }
-//       ];
-//     }
-    
-//     // Add category filter
-//     if (category) {
-//       query['category._id'] = category;
-//     }
-    
-//     // Add status filter
-//     if (status === 'active') {
-//       query['status.active'] = true;
-//     } else if (status === 'inactive') {
-//       query['status.active'] = false;
-//     } else if (status === 'instock') {
-//       query['status.inStock'] = true;
-//     } else if (status === 'outofstock') {
-//       query['status.inStock'] = false;
-//     }
-    
-//     // Count total documents
-//     const total = await Product.countDocuments(query);
-    
-//     // Get paginated products
-//     const products = await Product.find(query)
-//       .sort({ [sort]: order === 'desc' ? -1 : 1 })
-//       .skip((page - 1) * limit)
-//       .limit(parseInt(limit));
-    
-//     res.json({
-//       success: true,
-//       products,
-//       pagination: {
-//         total,
-//         page: parseInt(page),
-//         limit: parseInt(limit),
-//         pages: Math.ceil(total / limit)
-//       }
-//     });
-//   } catch (error) {
-//     console.error('Get all products error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Error fetching products',
-//       error: error.message
-//     });
-//   }
-// };
+// ORDER MANAGEMENT
 
-// Implement other controller methods for products, orders, etc.
-// ...
+/**
+ * @desc    Get all orders (admin)
+ * @route   GET /api/admin/orders
+ * @access  Private (Admin)
+ */
+exports.getAllOrders = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 20, sort = 'createdAt', order = 'desc' } = req.query;
+    
+    // Build query
+    const query = {};
+    if (status) {
+      query.status = status;
+    }
+    
+    // Build sort object
+    const sortObj = {};
+    sortObj[sort] = order === 'desc' ? -1 : 1;
+    
+    // Count total documents
+    const total = await Order.countDocuments(query);
+    
+    // Calculate pagination
+    const skip = (Number(page) - 1) * Number(limit);
+    
+    // Get orders
+    const orders = await Order.find(query)
+      .sort(sortObj)
+      .skip(skip)
+      .limit(Number(limit));
+    
+    res.json({
+      success: true,
+      count: orders.length,
+      total,
+      pages: Math.ceil(total / Number(limit)),
+      currentPage: Number(page),
+      orders
+    });
+  } catch (error) {
+    console.error('Error fetching all orders:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch orders',
+      error: error.message
+    });
+  }
+};
 
-// WITHDRAWAL MANAGEMENT
-// exports.getPendingWithdrawals = async (req, res) => {
-//   try {
-//     // Find users with pending withdrawal requests
-//     const usersWithPendingWithdrawals = await User.find({
-//       'withdrawals.pendingRequest': true
-//     }).select('name email username withdrawals referral.totalEarnings');
+/**
+ * @desc    Get order by ID (admin)
+ * @route   GET /api/admin/orders/:id
+ * @access  Private (Admin)
+ */
+exports.getOrderById = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
     
-//     res.json({
-//       success: true,
-//       withdrawals: usersWithPendingWithdrawals
-//     });
-//   } catch (error) {
-//     console.error('Get pending withdrawals error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Error fetching pending withdrawals',
-//       error: error.message
-//     });
-//   }
-// };
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      order
+    });
+  } catch (error) {
+    console.error('Error fetching order:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch order',
+      error: error.message
+    });
+  }
+};
 
-// exports.approveWithdrawal = async (req, res) => {
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
-  
-//   try {
-//     const userId = req.params.id;
-//     const { amount, transactionDetails } = req.body;
+/**
+ * @desc    Update order status (admin)
+ * @route   PUT /api/admin/orders/:id/status
+ * @access  Private (Admin)
+ */
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { status, trackingNumber, trackingUrl, notes } = req.body;
     
-//     // Find user
-//     const user = await User.findById(userId).session(session);
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: 'Status is required'
+      });
+    }
     
-//     if (!user) {
-//       await session.abortTransaction();
-//       session.endSession();
-//       return res.status(404).json({
-//         success: false,
-//         message: 'User not found'
-//       });
-//     }
+    const order = await Order.findById(req.params.id);
     
-//     // Check if user has a pending withdrawal
-//     if (!user.withdrawals.pendingRequest) {
-//       await session.abortTransaction();
-//       session.endSession();
-//       return res.status(400).json({
-//         success: false,
-//         message: 'No pending withdrawal request found'
-//       });
-//     }
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
     
-//     // Check if user has enough balance
-//     if (user.referral.totalEarnings < amount) {
-//       await session.abortTransaction();
-//       session.endSession();
-//       return res.status(400).json({
-//         success: false,
-//         message: 'Insufficient balance'
-//       });
-//     }
+    // Update order
+    order.status = status;
     
-//     // Process withdrawal
-//     user.referral.totalEarnings -= amount;
-//     user.withdrawals.pendingRequest = false;
-//     user.withdrawals.lastWithdrawalDate = new Date();
-//     user.withdrawals.totalWithdrawn += amount;
+    if (trackingNumber) {
+      order.trackingNumber = trackingNumber;
+    }
     
-//     // Save withdrawal transaction record
-//     // (Create a withdrawal model if you need to track these details)
+    if (trackingUrl) {
+      order.trackingUrl = trackingUrl;
+    }
     
-//     // Save changes
-//     await user.save({ session });
+    if (notes) {
+      order.notes = notes;
+    }
     
-//     // Commit transaction
-//     await session.commitTransaction();
-//     session.endSession();
+    // Set status-specific dates
+    if (status === 'shipped' && !order.shippedAt) {
+      order.shippedAt = Date.now();
+    }
     
-//     res.json({
-//       success: true,
-//       message: 'Withdrawal approved successfully',
-//       withdrawal: {
-//         userId: user._id,
-//         amount,
-//         date: new Date(),
-//         bankDetails: user.withdrawals.bankAccount
-//       }
-//     });
-//   } catch (error) {
-//     // Abort transaction on error
-//     await session.abortTransaction();
-//     session.endSession();
+    if (status === 'delivered' && !order.deliveredAt) {
+      order.deliveredAt = Date.now();
+    }
     
-//     console.error('Approve withdrawal error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Error approving withdrawal',
-//       error: error.message
-//     });
-//   }
-// };
+    if (status === 'cancelled' && !order.cancelledAt) {
+      order.cancelledAt = Date.now();
+      
+      // Return items to inventory
+      for (const item of order.items) {
+        const product = await Product.findById(item.product._id);
+        if (product) {
+          product.quantity += item.quantity;
+          await product.save();
+        }
+      }
+    }
+    
+    if (status === 'refunded' && !order.refundedAt) {
+      order.refundedAt = Date.now();
+    }
+    
+    await order.save();
+    
+    res.json({
+      success: true,
+      message: 'Order status updated successfully',
+      order
+    });
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update order status',
+      error: error.message
+    });
+  }
+};
 
-// exports.rejectWithdrawal = async (req, res) => {
-//   try {
-//     const userId = req.params.id;
-//     const { reason } = req.body;
+/**
+ * @desc    Get sales report (admin)
+ * @route   GET /api/admin/reports/sales
+ * @access  Private (Admin)
+ */
+exports.getSalesReport = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
     
-//     // Find user
-//     const user = await User.findById(userId);
+    let dateQuery = {};
     
-//     if (!user) {
-//       return res.status(404).json({
-//         success: false,
-//         message: 'User not found'
-//       });
-//     }
+    if (startDate && endDate) {
+      dateQuery = {
+        createdAt: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate)
+        }
+      };
+    }
     
-//     // Check if user has a pending withdrawal
-//     if (!user.withdrawals.pendingRequest) {
-//       return res.status(400).json({
-//         success: false,
-//         message: 'No pending withdrawal request found'
-//       });
-//     }
+    // Get total sales
+    const totalSales = await Order.aggregate([
+      { $match: { ...dateQuery, status: { $nin: ['cancelled', 'refunded'] } } },
+      { $group: {
+        _id: null,
+        total: { $sum: '$total' },
+        count: { $sum: 1 }
+      }}
+    ]);
     
-//     // Reset pending request
-//     user.withdrawals.pendingRequest = false;
+    // Get sales by day
+    const dailySales = await Order.aggregate([
+      { $match: { ...dateQuery, status: { $nin: ['cancelled', 'refunded'] } } },
+      { $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+        sales: { $sum: '$total' },
+        count: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ]);
     
-//     // Save changes
-//     await user.save();
+    // Get sales by status
+    const salesByStatus = await Order.aggregate([
+      { $match: dateQuery },
+      { $group: {
+        _id: '$status',
+        total: { $sum: '$total' },
+        count: { $sum: 1 }
+      }}
+    ]);
     
-//     res.json({
-//       success: true,
-//       message: 'Withdrawal rejected successfully'
-//     });
-//   } catch (error) {
-//     console.error('Reject withdrawal error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Error rejecting withdrawal',
-//       error: error.message
-//     });
-//   }
-// };
-
-// REPORTS
-// exports.getSalesReport = async (req, res) => {
-//   try {
-//     const { startDate, endDate } = req.query;
-    
-//     // Build date range filter
-//     const dateFilter = {};
-//     if (startDate) {
-//       dateFilter.createdAt = { $gte: new Date(startDate) };
-//     }
-//     if (endDate) {
-//       if (dateFilter.createdAt) {
-//         dateFilter.createdAt.$lte = new Date(endDate);
-//       } else {
-//         dateFilter.createdAt = { $lte: new Date(endDate) };
-//       }
-//     }
-    
-//     // Get sales data
-//     const salesData = await Order.aggregate([
-//       { $match: { ...dateFilter, status: 'completed' } },
-//       { $group: {
-//         _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-//         sales: { $sum: '$totalAmount' },
-//         count: { $sum: 1 }
-//       }},
-//       { $sort: { _id: 1 } }
-//     ]);
-    
-//     // Get total stats
-//     const totalStats = await Order.aggregate([
-//       { $match: { ...dateFilter, status: 'completed' } },
-//       { $group: {
-//         _id: null,
-//         totalSales: { $sum: '$totalAmount' },
-//         totalOrders: { $sum: 1 },
-//         avgOrderValue: { $avg: '$totalAmount' }
-//       }}
-//     ]);
-    
-//     res.json({
-//       success: true,
-//       salesData,
-//       totalStats: totalStats[0] || { totalSales: 0, totalOrders: 0, avgOrderValue: 0 }
-//     });
-//   } catch (error) {
-//     console.error('Sales report error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Error generating sales report',
-//       error: error.message
-//     });
-//   }
-// };
-
-// Implement other report controllers...
+    res.json({
+      success: true,
+      totalSales: totalSales[0] ? totalSales[0].total : 0,
+      orderCount: totalSales[0] ? totalSales[0].count : 0,
+      dailySales,
+      salesByStatus
+    });
+  } catch (error) {
+    console.error('Error generating sales report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate sales report',
+      error: error.message
+    });
+  }
+};

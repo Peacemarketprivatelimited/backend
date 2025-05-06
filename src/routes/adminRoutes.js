@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
-const { protect } = require('../middlewares/');
+const { protect } = require('../middlewares/authMiddleware');
 const { isAdmin, hasPermission } = require('../middlewares/adminMiddleware');
 
 // Apply authentication and admin check to all routes
@@ -34,9 +34,9 @@ router.put('/users/:id/role', hasPermission('manageUsers'), adminController.chan
 // router.delete('/categories/:id', hasPermission('manageCategories'), adminController.deleteCategory);
 
 // Order management
-// router.get('/orders', hasPermission('manageOrders'), adminController.getAllOrders);
-// router.get('/orders/:id', hasPermission('manageOrders'), adminController.getOrderById);
-// router.put('/orders/:id/status', hasPermission('manageOrders'), adminController.updateOrderStatus);
+router.get('/orders', hasPermission('manageOrders'), adminController.getAllOrders);
+router.get('/orders/:id', hasPermission('manageOrders'), adminController.getOrderById);
+router.put('/orders/:id/status', hasPermission('manageOrders'), adminController.updateOrderStatus);
 
 // Subscription management
 // router.get('/subscriptions', hasPermission('manageSubscriptions'), adminController.getAllSubscriptions);

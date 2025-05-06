@@ -33,9 +33,6 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-
-
-
 // Body parser middleware
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -51,6 +48,8 @@ if (environment === 'development') {
 
 // Import routes
 const userRoutes = require('./src/routes/userRoutes');
+const orderRoutes = require('./src/routes/orderRoutes');
+
 // Import other routes as they are created
 // const productRoutes = require('./src/routes/productRoutes');
 // const subscriptionRoutes = require('./src/routes/subscriptionRoutes');
@@ -59,7 +58,7 @@ const userRoutes = require('./src/routes/userRoutes');
 app.use('/api/users', userRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
-
+app.use('/api/orders', orderRoutes);
 // app.use('/api/products', productRoutes);
 // app.use('/api/subscriptions', subscriptionRoutes);
 
@@ -70,6 +69,18 @@ const adminLimiter = rateLimit({
   });
   
   app.use('/api/admin', adminLimiter,adminRoutes);
+
+// Subscription routes
+const subscriptionRoutes = require('./src/routes/subscriptionRoutes');
+app.use('/api/subscription', subscriptionRoutes);
+
+// Run scheduled tasks
+const { checkExpiredSubscriptions } = require('./src/utils/scheduledTasks');
+
+// Check for expired subscriptions daily
+setInterval(checkExpiredSubscriptions, 24 * 60 * 60 * 1000);
+// Initial check at startup
+setTimeout(checkExpiredSubscriptions, 5000);
 
 // Root route
 app.get('/', (req, res) => {
