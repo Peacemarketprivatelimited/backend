@@ -271,42 +271,59 @@ exports.changeUserRole = async (req, res) => {
  * @route   GET /api/admin/orders
  * @access  Private (Admin)
  */
+// exports.getAllOrders = async (req, res) => {
+//   try {
+//     const { status, page = 1, limit = 20, sort = 'createdAt', order = 'desc' } = req.query;
+    
+//     // Build query
+//     const query = {};
+//     if (status) {
+//       query.status = status;
+//     }
+    
+//     // Build sort object
+//     const sortObj = {};
+//     sortObj[sort] = order === 'desc' ? -1 : 1;
+    
+//     // Count total documents
+//     const total = await Order.countDocuments(query);
+    
+//     // Calculate pagination
+//     const skip = (Number(page) - 1) * Number(limit);
+    
+//     // Get orders
+//     const orders = await Order.find(query)
+//       .sort(sortObj)
+//       .skip(skip)
+//       .limit(Number(limit));
+    
+//     res.json({
+//       success: true,
+//       count: orders.length,
+//       total,
+//       pages: Math.ceil(total / Number(limit)),
+//       currentPage: Number(page),
+//       orders
+//     });
+//   } catch (error) {
+//     console.error('Error fetching all orders:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Failed to fetch orders',
+//       error: error.message
+//     });
+//   }
+// };
 exports.getAllOrders = async (req, res) => {
   try {
-    const { status, page = 1, limit = 20, sort = 'createdAt', order = 'desc' } = req.query;
-    
-    // Build query
-    const query = {};
-    if (status) {
-      query.status = status;
-    }
-    
-    // Build sort object
-    const sortObj = {};
-    sortObj[sort] = order === 'desc' ? -1 : 1;
-    
-    // Count total documents
-    const total = await Order.countDocuments(query);
-    
-    // Calculate pagination
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    // Get orders
-    const orders = await Order.find(query)
-      .sort(sortObj)
-      .skip(skip)
-      .limit(Number(limit));
-    
+    const orders = await Order.find().sort({ createdAt: -1 });
     res.json({
       success: true,
       count: orders.length,
-      total,
-      pages: Math.ceil(total / Number(limit)),
-      currentPage: Number(page),
       orders
     });
   } catch (error) {
-    console.error('Error fetching all orders:', error);
+    console.error('Error fetching orders:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch orders',
@@ -314,7 +331,6 @@ exports.getAllOrders = async (req, res) => {
     });
   }
 };
-
 /**
  * @desc    Get order by ID (admin)
  * @route   GET /api/admin/orders/:id

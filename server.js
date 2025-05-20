@@ -38,7 +38,11 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // CORS middleware
-app.use(cors());
+app.use(cors({
+  origin:[ 'http://localhost:5173','http://localhost:5174'], // Your Vite frontend default port
+  credentials: true
+}));
+
 
 // Logging middleware
 const environment = process.env.NODE_ENV || 'development';

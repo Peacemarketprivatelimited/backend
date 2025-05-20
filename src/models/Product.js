@@ -104,7 +104,7 @@ const productSchema = new mongoose.Schema({
         type: Number,
         min: 0,
         max: 100,
-        default: 10 // Default 10% discount for subscription users
+        default: 0// Default 10% discount for subscription users
       },
       active: {
         type: Boolean,

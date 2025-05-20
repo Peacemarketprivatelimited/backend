@@ -83,10 +83,10 @@ exports.register = async (req, res) => {
 // Login user
 exports.login = async (req, res) => {
   try {
-    const { login, username, password } = req.body;
+    const { email, username, password } = req.body;
     
     // Use login field if provided, otherwise fall back to username
-    const userIdentifier = login || username;
+    const userIdentifier = email || username;
     
     if (!userIdentifier) {
       return res.status(400).json({

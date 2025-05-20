@@ -543,15 +543,20 @@ exports.deleteProduct = async (req, res) => {
       });
     }
     
-    // Delete images from S3
-    for (const image of product.images) {
-      if (image.public_id) {
-        await deleteFromS3(image.public_id);
+    // Delete images from S3 - with error handling
+    try {
+      for (const image of product.images || []) {
+        if (image && image.public_id) {
+          await deleteFromS3(image.public_id);
+        }
       }
+    } catch (s3Error) {
+      console.error('Error deleting images from S3:', s3Error);
+      // Continue with product deletion even if image deletion fails
     }
     
-    // Delete product
-    await product.remove();
+    // Use deleteOne instead of deprecated remove()
+    await Product.deleteOne({ _id: id });
     
     res.json({
       success: true,
@@ -566,7 +571,6 @@ exports.deleteProduct = async (req, res) => {
     });
   }
 };
-
 /**
  * @desc    Update product status (active/inactive)
  * @route   PUT /api/products/:id/status
