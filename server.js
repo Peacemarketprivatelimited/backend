@@ -10,6 +10,7 @@ const connectDB = require('./src/config/Db');
 const adminRoutes = require('./src/routes/adminRoutes');
 const productRoutes = require('./src/routes/productRoutes');
 const categoryRoutes = require('./src/routes/categoryRoutes');
+const paymentRoutes = require('./src/routes/paymentRoutes');
 
 // Load environment variables
 dotenv.config();
@@ -38,10 +39,8 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // CORS middleware
-app.use(cors({
-  origin:[ process.env.PEACEMARKET_FRONTEND_URL,'http://localhost:5174'], // Your Vite frontend default port
-  credentials: true
-}));
+app.use(cors({// Your Vite frontend default port
+  credentials: true}));
 
 
 // Logging middleware
@@ -63,6 +62,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/payment', paymentRoutes);
 // app.use('/api/products', productRoutes);
 // app.use('/api/subscriptions', subscriptionRoutes);
 
