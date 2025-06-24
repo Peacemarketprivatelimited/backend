@@ -39,7 +39,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // CORS middleware
 app.use(cors({
-  origin:[ process.env.PEACRMARKET_FRONTEND_URL,'http://localhost:5174'], // Your Vite frontend default port
+  origin:[ process.env.PEACEMARKET_FRONTEND_URL,'http://localhost:5174'], // Your Vite frontend default port
   credentials: true
 }));
 
