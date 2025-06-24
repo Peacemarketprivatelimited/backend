@@ -87,10 +87,10 @@ setInterval(checkExpiredSubscriptions, 24 * 60 * 60 * 1000);
 setTimeout(checkExpiredSubscriptions, 5000);
 
 // Root route
-app.get('/', (req, res) => {
+app.get('/test', (req, res) => {
   res.json({
     success: true,
-    message: 'Peace Market API is running',
+    message: 'Peace Market API is running, ci/cd good',
     environment,
     version: '1.0.0'
   });
