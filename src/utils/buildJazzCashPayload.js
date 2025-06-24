@@ -18,8 +18,8 @@ function buildJazzCashPayload(amount) {
         pp_MerchantID: merchantId,
         pp_SubMerchantID: '',
         pp_Password: password,
-        pp_BankID: '',
-        pp_ProductID: '',
+        pp_BankID: 'TBANK',
+        pp_ProductID: 'RETL',
         pp_TxnRefNo: txnRefNo,
         pp_Amount: (amount * 100).toString(), // Convert to paisa
         pp_TxnCurrency: 'PKR',

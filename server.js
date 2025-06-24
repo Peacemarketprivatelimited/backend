@@ -63,8 +63,6 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payment', paymentRoutes);
-// app.use('/api/products', productRoutes);
-// app.use('/api/subscriptions', subscriptionRoutes);
 
 const adminLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
