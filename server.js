@@ -88,12 +88,7 @@ setTimeout(checkExpiredSubscriptions, 5000);
 
 // Root route
 app.get('/test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Peace Market API is running, ci/cd good',
-    environment,
-    version: '1.0.0'
-  });
+  res.status(200).json({"success": true, "message": "API is running successfully!" });
 });
 
 // Handle 404 routes
