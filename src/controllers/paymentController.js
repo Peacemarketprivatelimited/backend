@@ -1,36 +1,18 @@
-// backend/src/controllers/paymentController.js
 const buildJazzCashPayload = require("../utils/buildJazzCashPayload");
 
 exports.purchaseSubscription = async (req, res) => {
     try {
         const { paymentMethod, amount } = req.body;
-        console.log("Payment request:", paymentMethod, amount);
 
-        if (paymentMethod === 'JazzCash Wallet') {
-            const payload = buildJazzCashPayload(amount);
-            const postURL = 'https://sandbox.jazzcash.com.pk/CustomerPortal/transactionmanagement/merchantform';
-
-            return res.json({
-                success: true,
-                data: payload,
-                postURL
-            });
+        if (paymentMethod !== "JazzCash Wallet") {
+            return res.status(400).json({ message: "Unsupported payment method" });
         }
 
-        // Fallback (for other methods if needed)
-        res.json({
-            success: true,
-            subscription: {
-                referralCode: 'FAKE1234'
-            }
-        });
-    } catch (error) {
-        console.error("Payment processing error:", error);
-        res.status(500).json({
-            success: false,
-            message: "Payment processing failed",
-            error: error.message
-        });
+        const response = buildJazzCashPayload(amount);
+        return res.status(200).json(response);
+    } catch (err) {
+        console.error("Payment error:", err);
+        res.status(500).json({ message: "Internal server error" });
     }
 };
 
