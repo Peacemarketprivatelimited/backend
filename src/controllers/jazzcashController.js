@@ -87,7 +87,7 @@ exports.handlePaymentCallback = async (req, res) => {
         }
 
         // Redirect to frontend with payment result
-        const frontendURL = `https://908f4a12761a.ngrok-free.app/payment-callback?status=${status}&txnRef=${body.pp_TxnRefNo}&amount=${body.pp_Amount}&message=${encodeURIComponent(body.pp_ResponseMessage || '')}`;
+        const frontendURL = `https://peace-market.com/payment-callback?status=${status}&txnRef=${body.pp_TxnRefNo}&amount=${body.pp_Amount}&message=${encodeURIComponent(body.pp_ResponseMessage || '')}`;
         res.redirect(frontendURL);
 
     } catch (error) {
