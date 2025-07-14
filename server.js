@@ -10,7 +10,7 @@ const connectDB = require('./src/config/Db');
 const adminRoutes = require('./src/routes/adminRoutes');
 const productRoutes = require('./src/routes/productRoutes');
 const categoryRoutes = require('./src/routes/categoryRoutes');
-const paymentRoutes = require('./src/routes/paymentRoutes');
+const jazzcashRoutes = require('./src/routes/jazzcashRoutes')
 
 // Load environment variables
 dotenv.config();
@@ -62,7 +62,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
-app.use('/api/payment', paymentRoutes);
+app.use('/api/jazzcash', jazzcashRoutes);
 
 const adminLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
