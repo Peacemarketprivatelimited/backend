@@ -511,3 +511,76 @@ exports.getSalesReport = async (req, res) => {
     });
   }
 };
+
+
+// ...existing code...
+exports.getAllWithdrawals = async (req, res) => {
+  try {
+    const users = await User.find({ "withdrawals.history.0": { $exists: true } })
+      .select("name username email withdrawals.history withdrawals.bankAccount");
+    // Flatten all withdrawal requests
+    const withdrawals = [];
+    users.forEach(user => {
+      user.withdrawals.history.forEach(w => {
+        withdrawals.push({
+          userId: user._id,
+          name: user.name,
+          username: user.username,
+          email: user.email,
+          bankAccount: user.withdrawals.bankAccount,
+          ...w
+        });
+      });
+    });
+    res.json({ success: true, withdrawals });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch withdrawals", error: error.message });
+  }
+};
+
+exports.approveWithdrawal = async (req, res) => {
+  try {
+    const { userId, requestedAt, adminNote } = req.body;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    // Find the pending withdrawal
+    const withdrawal = user.withdrawals.history.find(w => w.status === 'pending' && w.requestedAt.getTime() === new Date(requestedAt).getTime());
+    if (!withdrawal) return res.status(404).json({ success: false, message: "Withdrawal not found" });
+
+    withdrawal.status = 'approved';
+    withdrawal.processedAt = new Date();
+    withdrawal.adminNote = adminNote || '';
+    user.withdrawals.pendingRequest = false;
+    user.withdrawals.lastWithdrawalDate = new Date();
+    user.withdrawals.totalWithdrawn += withdrawal.amountPaid;
+    user.referral.totalEarnings = 0; // Reset earnings after withdrawal
+
+    await user.save();
+    res.json({ success: true, message: "Withdrawal approved", withdrawal });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to approve withdrawal", error: error.message });
+  }
+};
+
+exports.rejectWithdrawal = async (req, res) => {
+  try {
+    const { userId, requestedAt, adminNote } = req.body;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    const withdrawal = user.withdrawals.history.find(w => w.status === 'pending' && w.requestedAt.getTime() === new Date(requestedAt).getTime());
+    if (!withdrawal) return res.status(404).json({ success: false, message: "Withdrawal not found" });
+
+    withdrawal.status = 'rejected';
+    withdrawal.processedAt = new Date();
+    withdrawal.adminNote = adminNote || '';
+    user.withdrawals.pendingRequest = false;
+
+    await user.save();
+    res.json({ success: true, message: "Withdrawal rejected", withdrawal });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to reject withdrawal", error: error.message });
+  }
+};
+// ...existing code...

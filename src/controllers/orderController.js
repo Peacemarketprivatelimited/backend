@@ -159,7 +159,8 @@ exports.createOrder = async (req, res) => {
       shippingAddress,
       billingAddress,
       payment,
-      notes
+      notes,
+      phoneNumber // <-- Add phoneNumber from request body
     } = req.body;
 
     // Validate items exist
@@ -181,6 +182,12 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Billing address is required'
+      });
+    }
+    if (!phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number is required'
       });
     }
 
@@ -258,10 +265,11 @@ exports.createOrder = async (req, res) => {
 
     // Create new order
     const order = new Order({
-      orderNumber: generateOrderNumber(), // <-- add this line
+      orderNumber: generateOrderNumber(),
       items: orderItems,
       shippingAddress,
       billingAddress,
+      phoneNumber, // <-- Save phone number in order
       payment: {
         ...payment,
         amount: total
@@ -451,6 +459,126 @@ exports.trackOrder = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to track order',
+      error: error.message
+    });
+  }
+};
+
+
+/**
+ * @desc    Update order status (admin or authorized user)
+ * @route   PUT /api/orders/:id/status
+ * @access  Private (Admin or User with permission)
+ */
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
+
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or missing status value'
+      });
+    }
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    order.status = status;
+    await order.save();
+
+    res.json({
+      success: true,
+      message: `Order status updated to "${status}"`,
+      order
+    });
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update order status',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Get the status of an order
+ * @route   GET /api/orders/:id/status
+ * @access  Private (User or Admin)
+ */
+exports.getOrderStatus = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id).select('orderNumber status');
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      orderNumber: order.orderNumber,
+      status: order.status
+    });
+  } catch (error) {
+    console.error('Error getting order status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get order status',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Update order status by admin
+ * @route   PUT /api/orders/:id/status
+ * @access  Private (Admin)
+ */
+exports.adminUpdateOrderStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
+
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or missing status value'
+      });
+    }
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    order.status = status;
+    await order.save();
+
+    res.json({
+      success: true,
+      message: `Order status updated to "${status}" by admin`,
+      order
+    });
+  } catch (error) {
+    console.error('Error updating order status by admin:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update order status by admin',
       error: error.message
     });
   }

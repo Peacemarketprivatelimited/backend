@@ -79,7 +79,17 @@ const userSchema = new mongoose.Schema(
       },
       pendingRequest: { type: Boolean, default: false },
       lastWithdrawalDate: { type: Date },
-      totalWithdrawn: { type: Number, default: 0 }
+      totalWithdrawn: { type: Number, default: 0 },
+      history: [
+        {
+          amountRequested: Number,
+          amountPaid: Number,
+          status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+          requestedAt: Date,
+          processedAt: Date,
+          adminNote: String
+        }
+      ]
     },
 
     createdAt: { type: Date, default: Date.now },

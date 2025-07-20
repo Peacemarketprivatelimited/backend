@@ -43,9 +43,9 @@ router.put('/orders/:id/status', hasPermission('manageOrders'), adminController.
 // router.get('/subscriptions/:id', hasPermission('manageSubscriptions'), adminController.getSubscriptionById);
 
 // Withdrawal management
-// router.get('/withdrawals', hasPermission('manageWithdrawals'), adminController.getPendingWithdrawals);
-// router.put('/withdrawals/:id/approve', hasPermission('manageWithdrawals'), adminController.approveWithdrawal);
-// router.put('/withdrawals/:id/reject', hasPermission('manageWithdrawals'), adminController.rejectWithdrawal);
+router.get('/withdrawals', hasPermission('manageWithdrawals'), adminController.getAllWithdrawals);
+router.put('/withdrawals/approve', hasPermission('manageWithdrawals'), adminController.approveWithdrawal);
+router.put('/withdrawals/reject', hasPermission('manageWithdrawals'), adminController.rejectWithdrawal);
 
 // Reports
 // router.get('/reports/sales', hasPermission('viewReports'), adminController.getSalesReport);

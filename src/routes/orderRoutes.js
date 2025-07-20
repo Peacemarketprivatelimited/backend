@@ -20,8 +20,13 @@ router.get('/:id/track', orderController.trackOrder);
 // Order management (uncomment these)
 router.get('/orders/:id', hasPermission('manageOrders'), adminController.getOrderById);
 router.put('/orders/:id/status', hasPermission('manageOrders'), adminController.updateOrderStatus);
+router.put('/orders/:id/status', hasPermission('manageOrders'), orderController.adminUpdateOrderStatus);
+
 
 // Reports (uncomment this)
 router.get('/reports/sales', hasPermission('viewReports'), adminController.getSalesReport);
+
+
+router.get('/:id/status', orderController.getOrderStatus);
 
 module.exports = router;

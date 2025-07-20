@@ -42,7 +42,9 @@ const orderSchema = new Schema({
     type: String,
     enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'],
     default: 'pending'
-  }
+  },
+  phoneNumber: { type: String, required: true },
+
 }, { timestamps: true });
 
 const Order = mongoose.model('Order', orderSchema);
