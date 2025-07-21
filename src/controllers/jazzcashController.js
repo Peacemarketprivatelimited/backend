@@ -1,62 +1,77 @@
 const crypto = require('crypto');
 const Transaction = require("../models/Transaction")
+const User = require('../models/User');
+const axios = require('axios');
 
-const INTEGRITY_SALT = process.env.JAZZCASH_SALT;
-
-exports.generateHash = (req, res) => {
+exports.processPayment = async (req, res) => {
     try {
-        const fields = req.body;
+        const payload = req.body;
+        const userId = payload.ppmpf_1 || null;
 
-        // Replace empty pp_MerchantID and pp_Password with environment ones
-        fields.pp_MerchantId = process.env.JAZZCASH_MERCHANT_ID;
-        fields.pp_Password = process.env.JAZZCASH_PASSWORD;
+        // Set credentials
+        payload.pp_MerchantID = process.env.JAZZCASH_MERCHANT_ID || 'MC152472';
+        payload.pp_Password = process.env.JAZZCASH_PASSWORD || 't14gvs195y';
+        payload.ppmpf_1 = '';
 
-        console.log(fields.pp_TxnDateTime);
+        // Get integrity salt
+        const integritySalt = process.env.JAZZCASH_SALT || '8z70cb1835';
 
-        const sortedKeys = Object.keys(fields).filter(k => fields[k] !== '').sort();
-        const hashString = INTEGRITY_SALT + '&' + sortedKeys.map(k => fields[k]).join('&');
+        // Collect all pp_ fields (except pp_SecureHash)
+        const ppFields = {};
+        Object.keys(payload).forEach(key => {
+            if ((key.startsWith('pp_')) &&
+                key !== 'pp_SecureHash' &&
+                payload[key] !== undefined &&
+                payload[key] !== null) {
+                ppFields[key.toLowerCase()] = payload[key]; // Convert keys to lowercase for sorting
+            }
+        });
 
+        // Sort keys alphabetically by ASCII value
+        const sortedKeys = Object.keys(ppFields).sort();
+
+        // Build values-only string (no keys)
+        let hashString = integritySalt;
+        sortedKeys.forEach(key => {
+            hashString += '&' + ppFields[key];
+        });
+
+        // Calculate hash with salt as key
         const hash = crypto
-            .createHmac('sha256', INTEGRITY_SALT)
+            .createHmac('sha256', integritySalt)
             .update(hashString)
             .digest('hex')
             .toUpperCase();
 
-        res.json({ hash, hashString, fields });
-    } catch (err) {
-        console.error('Hash generation error:', err);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-};
+        payload.pp_SecureHash = hash;
 
-const User = require('../models/User'); // or your user model path
+        // Make API request
+        const response = await axios.post(
+            "https://sandbox.jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction",
+            payload
+        );
 
-exports.handlePaymentCallback = async (req, res) => {
-    try {
-        console.log('✅ JazzCash Payment Callback Hit');
-        console.log('🔍 POST Body:', req.body);
+        console.log("✅ JazzCash Api Response:", response.data);
 
-        const body = req.body;
-        const userId = body.ppmpf_1 || null;
-
+        // Save transaction to DB
         let status = 'failed';
-        if (body.pp_ResponseCode === '000') status = 'success';
-        else if (body.pp_ResponseCode === '124' || body.pp_ResponseCode === '125') status = 'pending';
+        if (response.data.pp_ResponseCode === '000') status = 'success';
+        else if (response.data.pp_ResponseCode === '124' || response.data.pp_ResponseCode === '125') status = 'pending';
 
         // Save transaction
         await Transaction.create({
             userId,
-            pp_TxnRefNo: body.pp_TxnRefNo,
-            pp_Amount: body.pp_Amount,
-            pp_TxnCurrency: body.pp_TxnCurrency,
-            pp_TxnDateTime: body.pp_TxnDateTime,
-            pp_BillReference: body.pp_BillReference,
-            pp_Description: body.pp_Description,
-            pp_ResponseCode: body.pp_ResponseCode,
-            pp_ResponseMessage: body.pp_ResponseMessage,
-            pp_SecureHash: body.pp_SecureHash,
+            pp_TxnRefNo: response.data.pp_TxnRefNo,
+            pp_Amount: response.data.pp_Amount,
+            pp_TxnCurrency: response.data.pp_TxnCurrency,
+            pp_TxnDateTime: response.data.pp_TxnDateTime,
+            pp_BillReference: response.data.pp_BillReference,
+            pp_Description: response.data.pp_Description,
+            pp_ResponseCode: response.data.pp_ResponseCode,
+            pp_ResponseMessage: response.data.pp_ResponseMessage,
+            pp_SecureHash: response.data.pp_SecureHash,
             status,
-            raw: body,
+            raw: response.data,
         });
 
         // ✅ Update user subscription if success
@@ -65,7 +80,7 @@ exports.handlePaymentCallback = async (req, res) => {
             if (user) {
                 const purchaseDate = new Date();
                 const expiryDate = new Date(purchaseDate);
-                expiryDate.setDate(purchaseDate.getDate() + 30); // valid for 30 days
+                expiryDate.setDate(purchaseDate.getDate() + 180); // valid for 30 days
 
                 // Only generate referral code if it's not already there
                 if (!user.referralCode) {
@@ -77,8 +92,8 @@ exports.handlePaymentCallback = async (req, res) => {
                     isActive: true,
                     purchaseDate,
                     expiryDate,
-                    amountPaid: parseFloat(body.pp_Amount) / 100, // if stored in paisa
-                    subscriptionId: body.pp_TxnRefNo
+                    amountPaid: parseFloat(response.data.pp_Amount) / 100, // if stored in paisa
+                    subscriptionId: response.data.pp_TxnRefNo
                 };
 
                 await user.save(); // Save changes including referralCode and subscription
@@ -86,13 +101,9 @@ exports.handlePaymentCallback = async (req, res) => {
             }
         }
 
-        // Redirect to frontend with payment result
-        const frontendURL = `https://peace-market.com/payment-callback?status=${status}&txnRef=${body.pp_TxnRefNo}&amount=${body.pp_Amount}&message=${encodeURIComponent(body.pp_ResponseMessage || '')}`;
-        res.redirect(frontendURL);
-
-    } catch (error) {
-        console.error('❌ Payment callback error:', error);
-        res.status(500).send('Internal server error');
+        res.json(response.data);
+    } catch (err) {
+        console.error("❌ JazzCash payment error:", err.response?.data || err.message);
+        res.status(500).json({ error: "Payment processing failed" });
     }
 };
-

@@ -21,6 +21,8 @@ const app = express();
 // Connect to MongoDB
 connectDB();
 
+app.set('trust proxy', 1); // Trust first proxy for rate limiting
+
 // Security middleware
 app.use(helmet()); // Set security HTTP headers
 app.use(mongoSanitize()); // Sanitize inputs against NoSQL query injection
