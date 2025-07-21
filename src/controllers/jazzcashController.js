@@ -9,12 +9,12 @@ exports.processPayment = async (req, res) => {
         const userId = payload.ppmpf_1 || null;
 
         // Set credentials
-        payload.pp_MerchantID = process.env.JAZZCASH_MERCHANT_ID || 'MC152472';
-        payload.pp_Password = process.env.JAZZCASH_PASSWORD || 't14gvs195y';
+        payload.pp_MerchantID = process.env.JAZZCASH_MERCHANT_ID;
+        payload.pp_Password = process.env.JAZZCASH_PASSWORD;
         payload.ppmpf_1 = '';
 
         // Get integrity salt
-        const integritySalt = process.env.JAZZCASH_SALT || '8z70cb1835';
+        const integritySalt = process.env.JAZZCASH_SALT;
 
         // Collect all pp_ fields (except pp_SecureHash)
         const ppFields = {};
