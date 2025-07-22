@@ -21,6 +21,9 @@ const app = express();
 // Connect to MongoDB
 connectDB();
 
+//testing ci/cd
+
+
 app.set('trust proxy', 1); // Trust first proxy for rate limiting
 
 // Security middleware
