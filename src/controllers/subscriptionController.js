@@ -127,7 +127,7 @@ exports.getReferralStats = async (req, res) => {
     const userId = req.user.id;
     
     const user = await User.findById(userId)
-      .populate('referral.level1', 'name username subscription.isActive')
+      .populate('referral.level1', 'name username subscription.isActive subscription.expiryDate')
       .exec();
       
     if (!user) {
@@ -152,6 +152,7 @@ exports.getReferralStats = async (req, res) => {
       success: true,
       referralCode: user.referralCode,
       isSubscriptionActive: user.subscription.isActive && user.subscription.expiryDate > new Date(),
+      subscriptionExpiry: user.subscription.expiryDate,
       referralStats: {
         directReferrals: {
           total: user.referral.level1.length,
