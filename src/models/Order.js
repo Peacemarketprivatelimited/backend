@@ -19,7 +19,15 @@ const orderItemSchema = new Schema({
 }, { _id: false });
 
 const orderSchema = new Schema({
-  // user: { type: Object, required: false, default: null }, // optional or remove
+  guest: {
+    name: { type: String },
+    email: { type: String }
+  },
+  user: {
+    _id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    name: String,
+    email: String
+  },
   items: [orderItemSchema],
   orderNumber: { type: String, unique: true, required: true },
 

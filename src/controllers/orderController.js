@@ -160,7 +160,9 @@ exports.createOrder = async (req, res) => {
       billingAddress,
       payment,
       notes,
-      phoneNumber // <-- Add phoneNumber from request body
+      phoneNumber,
+      guestName,
+      guestEmail
     } = req.body;
 
     // Validate items exist
@@ -191,11 +193,23 @@ exports.createOrder = async (req, res) => {
       });
     }
 
+    // If guest checkout, require guestName and guestEmail
+    let user = null;
+    if (req.user) {
+      user = await User.findById(req.user.id);
+    } else {
+      if (!guestName || !guestEmail) {
+        return res.status(400).json({
+          success: false,
+          message: 'Name and email are required for guest checkout'
+        });
+      }
+    }
+
     // Calculate order totals
     let subtotal = 0;
     let orderItems = [];
 
-    // Process each item
     for (const item of items) {
       const product = await Product.findById(item.productId);
 
@@ -206,7 +220,6 @@ exports.createOrder = async (req, res) => {
         });
       }
 
-      // Check if product is active and in stock
       if (!product.status.active || !product.status.inStock) {
         return res.status(400).json({
           success: false,
@@ -214,7 +227,6 @@ exports.createOrder = async (req, res) => {
         });
       }
 
-      // Check if quantity is available
       if (item.quantity > product.quantity) {
         return res.status(400).json({
           success: false,
@@ -222,7 +234,6 @@ exports.createOrder = async (req, res) => {
         });
       }
 
-      // Calculate item price with discount
       let itemPrice = product.price;
       let discountAmount = 0;
 
@@ -231,7 +242,6 @@ exports.createOrder = async (req, res) => {
         itemPrice = itemPrice - discountAmount;
       }
 
-      // Add item to order
       const orderItem = {
         product: {
           _id: product._id,
@@ -252,24 +262,22 @@ exports.createOrder = async (req, res) => {
       orderItems.push(orderItem);
       subtotal += orderItem.totalPrice;
 
-      // Update product inventory (decrease quantity)
       product.quantity -= item.quantity;
       await product.save();
     }
 
-    // Calculate shipping cost, tax, and total
-    const shippingCost = 10; // Example flat rate
-    const taxRate = 0.07; // Example 7% tax
+    const shippingCost = 10;
+    const taxRate = 0.07;
     const taxAmount = subtotal * taxRate;
     const total = subtotal + shippingCost + taxAmount;
 
-    // Create new order
-    const order = new Order({
+    // Prepare order data
+    const orderData = {
       orderNumber: generateOrderNumber(),
       items: orderItems,
       shippingAddress,
       billingAddress,
-      phoneNumber, // <-- Save phone number in order
+      phoneNumber,
       payment: {
         ...payment,
         amount: total
@@ -279,8 +287,23 @@ exports.createOrder = async (req, res) => {
       tax: taxAmount,
       total,
       notes
-    });
+    };
 
+    // Attach user or guest info
+    if (user) {
+      orderData.user = {
+        _id: user._id,
+        name: user.name,
+        email: user.email
+      };
+    } else {
+      orderData.guest = {
+        name: guestName,
+        email: guestEmail
+      };
+    }
+
+    const order = new Order(orderData);
     await order.save();
 
     res.status(201).json({
