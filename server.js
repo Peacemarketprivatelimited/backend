@@ -44,9 +44,10 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // CORS middleware
-app.use(cors({// Your Vite frontend default port
-  credentials: true}));
-
+app.use(cors({
+  origin: ['https://admin.peace-market.com','https://peace-market.com'], // <-- set your frontend/admin domain here
+  credentials: true
+}));
 
 // Logging middleware
 const environment = process.env.NODE_ENV || 'development';
