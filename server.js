@@ -45,7 +45,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // CORS middleware
 app.use(cors({
-  origin: ['https://admin.peace-market.com','https://peace-market.com'], // <-- set your frontend/admin domain here
+  origin: ['https://admin.peace-market.com','https://peace-market.com','http://localhost:5173','https://3e3ca6361f00.ngrok-free.app'], // <-- set your frontend/admin domain here
   credentials: true
 }));
 

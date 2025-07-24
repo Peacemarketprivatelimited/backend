@@ -17,7 +17,7 @@ router.get('/:id', orderController.getOrderById);
 router.put('/:id/cancel', orderController.cancelOrder);
 router.get('/:id/track', orderController.trackOrder);
 
-// Order management (uncomment these)
+// Orders management (uncomment these)
 router.get('/orders/:id', hasPermission('manageOrders'), adminController.getOrderById);
 router.put('/orders/:id/status', hasPermission('manageOrders'), adminController.updateOrderStatus);
 router.put('/orders/:id/status', hasPermission('manageOrders'), orderController.adminUpdateOrderStatus);

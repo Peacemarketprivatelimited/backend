@@ -111,7 +111,7 @@ const mongoose = require('mongoose');
 //     const total = subtotal + shippingCost + taxAmount;
     
 //     // Create new order
-//     const order = new Order({
+//     const order = new Orders({
 //       user: {
 //         _id: user._id,
 //         name: user.name,
@@ -135,7 +135,7 @@ const mongoose = require('mongoose');
     
 //     res.status(201).json({
 //       success: true,
-//       message: 'Order created successfully',
+//       message: 'Orders created successfully',
 //       order
 //     });
 //   } catch (error) {
@@ -308,7 +308,7 @@ exports.createOrder = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Order created successfully',
+      message: 'Orders created successfully',
       order
     });
   } catch (error) {
@@ -326,9 +326,10 @@ exports.createOrder = async (req, res) => {
  * @access  Private (User)
  */
 exports.getUserOrders = async (req, res) => {
+  const userId = req.user.id;
   try {
     const orders = await Order.find({
-      'user._id': req.user.id
+      'user._id': userId
     }).sort({ createdAt: -1 });
     
     res.json({
@@ -337,7 +338,6 @@ exports.getUserOrders = async (req, res) => {
       orders
     });
   } catch (error) {
-    console.error('Error fetching user orders:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch orders',
@@ -358,7 +358,7 @@ exports.getOrderById = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: 'Orders not found'
       });
     }
     
@@ -396,7 +396,7 @@ exports.cancelOrder = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: 'Orders not found'
       });
     }
     
@@ -433,7 +433,7 @@ exports.cancelOrder = async (req, res) => {
     
     res.json({
       success: true,
-      message: 'Order cancelled successfully',
+      message: 'Orders cancelled successfully',
       order
     });
   } catch (error) {
@@ -461,7 +461,7 @@ exports.trackOrder = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: 'Orders not found'
       });
     }
     
@@ -510,7 +510,7 @@ exports.updateOrderStatus = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: 'Orders not found'
       });
     }
 
@@ -544,7 +544,7 @@ exports.getOrderStatus = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: 'Orders not found'
       });
     }
 
@@ -585,7 +585,7 @@ exports.adminUpdateOrderStatus = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: 'Orders not found'
       });
     }
 

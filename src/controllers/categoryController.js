@@ -452,7 +452,7 @@ exports.updateCategoryOrder = async (req, res) => {
     if (order === undefined) {
       return res.status(400).json({
         success: false,
-        message: 'Order value is required'
+        message: 'Orders value is required'
       });
     }
     

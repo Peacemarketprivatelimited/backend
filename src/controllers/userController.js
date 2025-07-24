@@ -120,7 +120,16 @@ exports.login = async (req, res) => {
     }
 
     // Generate JWT token
-    const token = generateToken(user._id);
+    const token = generateToken(user._id)
+
+    const currentDate = new Date();
+// Check if subscription is active based on both the flag and expiry date
+    const isSubscriptionActive =
+        user.subscription.isActive &&
+        user.subscription.expiryDate &&
+        new Date(user.subscription.expiryDate) > currentDate;
+
+    console.log(isSubscriptionActive);
 
     res.status(200).json({
       success: true,
@@ -130,7 +139,8 @@ exports.login = async (req, res) => {
         id: user._id,
         name: user.name,
         username: user.username,
-        email: user.email
+        email: user.email,
+        subscription: isSubscriptionActive
       }
     });
   } catch (error) {

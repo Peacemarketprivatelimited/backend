@@ -33,7 +33,7 @@ router.put('/users/:id/role', hasPermission('manageUsers'), adminController.chan
 // router.put('/categories/:id', hasPermission('manageCategories'), adminController.updateCategory);
 // router.delete('/categories/:id', hasPermission('manageCategories'), adminController.deleteCategory);
 
-// Order management
+// Orders management
 router.get('/orders', hasPermission('manageOrders'), adminController.getAllOrders);
 router.get('/orders/:id', hasPermission('manageOrders'), adminController.getOrderById);
 router.put('/orders/:id/status', hasPermission('manageOrders'), adminController.updateOrderStatus);

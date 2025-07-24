@@ -286,13 +286,13 @@ exports.changeUserRole = async (req, res) => {
 //     sortObj[sort] = order === 'desc' ? -1 : 1;
     
 //     // Count total documents
-//     const total = await Order.countDocuments(query);
+//     const total = await Orders.countDocuments(query);
     
 //     // Calculate pagination
 //     const skip = (Number(page) - 1) * Number(limit);
     
 //     // Get orders
-//     const orders = await Order.find(query)
+//     const orders = await Orders.find(query)
 //       .sort(sortObj)
 //       .skip(skip)
 //       .limit(Number(limit));
@@ -343,7 +343,7 @@ exports.getOrderById = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: 'Orders not found'
       });
     }
     
@@ -382,7 +382,7 @@ exports.updateOrderStatus = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: 'Orders not found'
       });
     }
     
@@ -431,7 +431,7 @@ exports.updateOrderStatus = async (req, res) => {
     
     res.json({
       success: true,
-      message: 'Order status updated successfully',
+      message: 'Orders status updated successfully',
       order
     });
   } catch (error) {
