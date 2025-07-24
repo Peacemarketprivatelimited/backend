@@ -65,7 +65,7 @@ exports.processPayment = async (req, res) => {
             pp_ResponseCode: response.data.pp_ResponseCode,
             raw: response.data,
             createdAt: new Date(),
-            statusInquiryScheduledFor: new Date(Date.now() + 1 * 30 * 1000) // 30 seconds from now
+            statusInquiryScheduledFor: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes from now
         });
 
         console.log(`✅ Payment initiated, status inquiry scheduled in 30 seconds for ${response.data.pp_TxnRefNo}`);
@@ -103,13 +103,13 @@ exports.checkTransactionStatus = async (req, res) => {
             }
 
             // Check if 10 minutes have passed
-            const tenMinutesAgo = new Date(Date.now() - 1 * 30 * 1000);
+            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
             if (pendingTxn.createdAt > tenMinutesAgo) {
                 return res.json({
                     success: true,
                     status: 'waiting',
                     message: 'Please wait at least 30 seconds before checking status',
-                    remainingTimeMs: pendingTxn.createdAt.getTime() + 1 * 30 * 1000 - Date.now()
+                    remainingTimeMs: pendingTxn.createdAt.getTime() + 10 * 60 * 1000 - Date.now()
                 });
             }
 
