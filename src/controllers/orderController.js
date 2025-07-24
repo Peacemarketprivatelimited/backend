@@ -155,56 +155,31 @@ function generateOrderNumber() {
 exports.createOrder = async (req, res) => {
   try {
     const {
-      items,
-      shippingAddress,
-      billingAddress,
-      payment,
-      notes,
+      name,
+      email,
       phoneNumber,
-      guestName,
-      guestEmail
+      address,
+      notes,
+      payment,
+      items
     } = req.body;
 
-    // Validate items exist
-    if (!items || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No items in the order'
-      });
-    }
-
     // Validate required fields
-    if (!shippingAddress) {
+    if (!name || !email || !phoneNumber || !address || !payment || !items || items.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Shipping address is required'
-      });
-    }
-    if (!billingAddress || !billingAddress.address) {
-      return res.status(400).json({
-        success: false,
-        message: 'Billing address is required'
-      });
-    }
-    if (!phoneNumber) {
-      return res.status(400).json({
-        success: false,
-        message: 'Phone number is required'
+        message: 'Missing required fields'
       });
     }
 
-    // If guest checkout, require guestName and guestEmail
-    let user = null;
-    if (req.user) {
-      user = await User.findById(req.user.id);
-    } else {
-      if (!guestName || !guestEmail) {
-        return res.status(400).json({
-          success: false,
-          message: 'Name and email are required for guest checkout'
-        });
-      }
+    // Only authenticated users can place orders
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required to place an order'
+      });
     }
+    const user = await User.findById(req.user.id);
 
     // Calculate order totals
     let subtotal = 0;
@@ -274,9 +249,14 @@ exports.createOrder = async (req, res) => {
     // Prepare order data
     const orderData = {
       orderNumber: generateOrderNumber(),
+      user: {
+        _id: user._id,
+        name,
+        email
+      },
       items: orderItems,
-      shippingAddress,
-      billingAddress,
+      shippingAddress: address,
+      billingAddress: { address },
       phoneNumber,
       payment: {
         ...payment,
@@ -288,20 +268,6 @@ exports.createOrder = async (req, res) => {
       total,
       notes
     };
-
-    // Attach user or guest info
-    if (user) {
-      orderData.user = {
-        _id: user._id,
-        name: user.name,
-        email: user.email
-      };
-    } else {
-      orderData.guest = {
-        name: guestName,
-        email: guestEmail
-      };
-    }
 
     const order = new Order(orderData);
     await order.save();
