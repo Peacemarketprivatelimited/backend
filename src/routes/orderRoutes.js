@@ -5,7 +5,7 @@ const { protect } = require('../middlewares/authMiddleware');
 const { hasPermission } = require('../middlewares/adminMiddleware');
 const adminController = require('../controllers/adminController');
 
-router.post('/', orderController.createOrder);
+router.post('/',protect, orderController.createOrder);
 // All order routes require authentication
 router.use(protect);
 router.get('/orders', hasPermission('manageOrders'), adminController.getAllOrders);
