@@ -49,7 +49,7 @@ exports.processPayment = async (req, res) => {
 
         // Make API request
         const response = await axios.post(
-            "https://sandbox.jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction",
+            "https://payments.jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction",
             payload
         );
 
@@ -198,7 +198,7 @@ const checkJazzCashTransactionStatus = async (pendingTransaction) => {
     payload.pp_SecureHash = hash;
 
     // API endpoint based on environment
-    const apiUrl = 'https://sandbox.jazzcash.com.pk/ApplicationAPI/API/PaymentInquiry/Inquire';
+    const apiUrl = 'https://payments.jazzcash.com.pk/ApplicationAPI/API/PaymentInquiry/Inquire';
 
     // Make API request
     const response = await axios.post(apiUrl, payload);
