@@ -4,6 +4,7 @@ const PendingTransaction = require("../models/PendingTransaction"); // New model
 const User = require('../models/User');
 const axios = require('axios');
 const cron = require('node-cron');
+const { distributeReferralEarnings } = require('../utils/referralUtils');
 
 exports.processPayment = async (req, res) => {
     try {
@@ -238,6 +239,7 @@ const checkJazzCashTransactionStatus = async (pendingTransaction) => {
                 pp_Status: response.data.pp_Status,
                 pp_SecureHash: response.data.pp_SecureHash,
                 status,
+                referralProcessed: false, // <- set default value
                 raw: pendingTransaction.raw,
                 statusInquiryResponse: response.data
             });
@@ -290,14 +292,15 @@ const checkJazzCashTransactionStatus = async (pendingTransaction) => {
                     await user.save();
                     console.log('✅ User subscription activated:', user._id);
 
-                    // Process referral credits if the user was referred by someone
-                    if (user.referredBy) {
-                        const referralUtils = require('../utils/referralUtils');
-                        await referralUtils.processReferralCredits(
-                            user._id,
-                            parseFloat(pendingTransaction.pp_Amount) / 100
+                    // FIX: distribute referral earnings correctly
+                    try {
+                        await distributeReferralEarnings(
+                          user._id,
+                          parseFloat(pendingTransaction.pp_Amount) / 100
                         );
-                        console.log(`✅ Referral credits processed for user ${user._id}`);
+                        console.log(`✅ Referral earnings distributed for buyer ${user._id}`);
+                    } catch (e) {
+                        console.error('❌ Error distributing referral earnings:', e);
                     }
                 }
             }
@@ -341,4 +344,28 @@ exports.checkPendingTransactions = async (req, res) => {
         console.error("❌ Error checking pending transactions:", err);
         res.status(500).json({ error: "Failed to check pending transactions" });
     }
+};
+
+exports.backfillReferralEarnings = async (req, res) => {
+  try {
+    const txns = await Transaction.find({ status: 'success', referralProcessed: { $ne: true }, userId: { $exists: true, $ne: null } });
+    let processed = 0;
+
+    for (const txn of txns) {
+      const amount = parseFloat(txn.pp_Amount) / 100;
+      try {
+        await distributeReferralEarnings(txn.userId, amount);
+        txn.referralProcessed = true;
+        await txn.save();
+        processed++;
+      } catch (e) {
+        console.error(`Backfill error for txn ${txn._id}:`, e);
+      }
+    }
+
+    res.json({ success: true, processed, total: txns.length });
+  } catch (error) {
+    console.error('Backfill referral earnings error:', error);
+    res.status(500).json({ success: false, message: 'Failed to backfill referral earnings', error: error.message });
+  }
 };
