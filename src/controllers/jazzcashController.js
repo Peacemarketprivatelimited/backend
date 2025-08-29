@@ -243,6 +243,31 @@ const checkJazzCashTransactionStatus = async (pendingTransaction) => {
             });
 
             // If successful, update user subscription
+            // if (status === 'success' && pendingTransaction.userId) {
+            //     const user = await User.findById(pendingTransaction.userId);
+            //     if (user) {
+            //         const purchaseDate = new Date();
+            //         const expiryDate = new Date(purchaseDate);
+            //         expiryDate.setDate(purchaseDate.getDate() + 180); // 180 days subscription
+
+            //         if (!user.referralCode) {
+            //             user.generateReferralCode();
+
+
+            //         }
+
+            //         user.subscription = {
+            //             isActive: true,
+            //             purchaseDate,
+            //             expiryDate,
+            //             amountPaid: parseFloat(pendingTransaction.pp_Amount) / 100,
+            //             subscriptionId: pendingTransaction.pp_TxnRefNo
+            //         };
+
+            //         await user.save();
+            //         console.log('✅ User subscription activated:', user._id);
+            //     }
+            // }
             if (status === 'success' && pendingTransaction.userId) {
                 const user = await User.findById(pendingTransaction.userId);
                 if (user) {
@@ -264,9 +289,18 @@ const checkJazzCashTransactionStatus = async (pendingTransaction) => {
 
                     await user.save();
                     console.log('✅ User subscription activated:', user._id);
+
+                    // Process referral credits if the user was referred by someone
+                    if (user.referredBy) {
+                        const referralUtils = require('../utils/referralUtils');
+                        await referralUtils.processReferralCredits(
+                            user._id,
+                            parseFloat(pendingTransaction.pp_Amount) / 100
+                        );
+                        console.log(`✅ Referral credits processed for user ${user._id}`);
+                    }
                 }
             }
-
             // Remove from pending transactions
             await PendingTransaction.deleteOne({ _id: pendingTransaction._id });
             transactionCreated = true;

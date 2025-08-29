@@ -6,8 +6,8 @@ const mongoose = require('mongoose');
 // USER MANAGEMENT
 exports.getAllUsers = async (req, res) => {
   try {
-    const { 
-      page = 1, 
+    const {
+      page = 1,
       limit = 10,
       search = '',
       sort = 'createdAt',
@@ -15,10 +15,10 @@ exports.getAllUsers = async (req, res) => {
       subscription = '',
       role = ''
     } = req.query;
-    
+
     // Build query
     const query = {};
-    
+
     // Add search filter
     if (search) {
       query.$or = [
@@ -27,29 +27,29 @@ exports.getAllUsers = async (req, res) => {
         { username: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     // Add subscription filter
     if (subscription === 'active') {
       query['subscription.isActive'] = true;
     } else if (subscription === 'inactive') {
       query['subscription.isActive'] = false;
     }
-    
+
     // Add role filter
     if (role) {
       query.role = role;
     }
-    
+
     // Count total documents
     const total = await User.countDocuments(query);
-    
+
     // Get paginated users
     const users = await User.find(query)
       .select('-passwordHash')
       .sort({ [sort]: order === 'desc' ? -1 : 1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
-    
+
     res.json({
       success: true,
       users,
@@ -73,14 +73,14 @@ exports.getAllUsers = async (req, res) => {
 exports.getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-passwordHash');
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
-    
+
     res.json({
       success: true,
       user
@@ -98,25 +98,25 @@ exports.getUserById = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { name, email, username } = req.body;
-    
+
     // Find user
     const user = await User.findById(req.params.id);
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
-    
+
     // Update fields
     if (name) user.name = name;
     if (email) user.email = email;
     if (username) user.username = username;
-    
+
     // Save changes
     await user.save();
-    
+
     res.json({
       success: true,
       message: 'User updated successfully',
@@ -138,17 +138,51 @@ exports.updateUser = async (req, res) => {
   }
 };
 
+// exports.deleteUser = async (req, res) => {
+//   try {
+//     const user = await User.findById(req.params.id);
+
+//     if (!user) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'User not found'
+//       });
+//     }
+
+//     // Check if trying to delete an admin
+//     if (user.role === 'admin' || user.role === 'superadmin') {
+//       return res.status(403).json({
+//         success: false,
+//         message: 'Cannot delete admin users'
+//       });
+//     }
+
+//     await user.remove();
+
+//     res.json({
+//       success: true,
+//       message: 'User deleted successfully'
+//     });
+//   } catch (error) {
+//     console.error('Delete user error:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error deleting user',
+//       error: error.message
+//     });
+//   }
+// };
 exports.deleteUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
-    
+
     // Check if trying to delete an admin
     if (user.role === 'admin' || user.role === 'superadmin') {
       return res.status(403).json({
@@ -156,9 +190,10 @@ exports.deleteUser = async (req, res) => {
         message: 'Cannot delete admin users'
       });
     }
-    
-    await user.remove();
-    
+
+    // Change this line from user.remove() to:
+    await User.deleteOne({ _id: req.params.id });
+
     res.json({
       success: true,
       message: 'User deleted successfully'
@@ -172,31 +207,30 @@ exports.deleteUser = async (req, res) => {
     });
   }
 };
-
 exports.changeUserStatus = async (req, res) => {
   try {
     const { isActive } = req.body;
-    
+
     if (typeof isActive !== 'boolean') {
       return res.status(400).json({
         success: false,
         message: 'Invalid status value'
       });
     }
-    
+
     const user = await User.findByIdAndUpdate(
       req.params.id,
       { isActive },
       { new: true }
     ).select('-passwordHash');
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
-    
+
     res.json({
       success: true,
       message: `User ${isActive ? 'activated' : 'deactivated'} successfully`,
@@ -215,7 +249,7 @@ exports.changeUserStatus = async (req, res) => {
 exports.changeUserRole = async (req, res) => {
   try {
     const { role, permissions } = req.body;
-    
+
     // Validate role
     if (!['user', 'admin'].includes(role)) {
       return res.status(400).json({
@@ -223,7 +257,7 @@ exports.changeUserRole = async (req, res) => {
         message: 'Invalid role'
       });
     }
-    
+
     // Only super admin can change roles
     if (req.user.role !== 'superadmin' && role === 'admin') {
       return res.status(403).json({
@@ -231,24 +265,24 @@ exports.changeUserRole = async (req, res) => {
         message: 'Only super admins can promote users to admin'
       });
     }
-    
+
     // Update user
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { 
+      {
         role,
         ...(permissions && { permissions })
       },
       { new: true }
     ).select('-passwordHash');
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
-    
+
     res.json({
       success: true,
       message: 'User role updated successfully',
@@ -274,29 +308,29 @@ exports.changeUserRole = async (req, res) => {
 // exports.getAllOrders = async (req, res) => {
 //   try {
 //     const { status, page = 1, limit = 20, sort = 'createdAt', order = 'desc' } = req.query;
-    
+
 //     // Build query
 //     const query = {};
 //     if (status) {
 //       query.status = status;
 //     }
-    
+
 //     // Build sort object
 //     const sortObj = {};
 //     sortObj[sort] = order === 'desc' ? -1 : 1;
-    
+
 //     // Count total documents
 //     const total = await Orders.countDocuments(query);
-    
+
 //     // Calculate pagination
 //     const skip = (Number(page) - 1) * Number(limit);
-    
+
 //     // Get orders
 //     const orders = await Orders.find(query)
 //       .sort(sortObj)
 //       .skip(skip)
 //       .limit(Number(limit));
-    
+
 //     res.json({
 //       success: true,
 //       count: orders.length,
@@ -339,14 +373,14 @@ exports.getAllOrders = async (req, res) => {
 exports.getOrderById = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
-    
+
     if (!order) {
       return res.status(404).json({
         success: false,
         message: 'Orders not found'
       });
     }
-    
+
     res.json({
       success: true,
       order
@@ -369,50 +403,50 @@ exports.getOrderById = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status, trackingNumber, trackingUrl, notes } = req.body;
-    
+
     if (!status) {
       return res.status(400).json({
         success: false,
         message: 'Status is required'
       });
     }
-    
+
     const order = await Order.findById(req.params.id);
-    
+
     if (!order) {
       return res.status(404).json({
         success: false,
         message: 'Orders not found'
       });
     }
-    
+
     // Update order
     order.status = status;
-    
+
     if (trackingNumber) {
       order.trackingNumber = trackingNumber;
     }
-    
+
     if (trackingUrl) {
       order.trackingUrl = trackingUrl;
     }
-    
+
     if (notes) {
       order.notes = notes;
     }
-    
+
     // Set status-specific dates
     if (status === 'shipped' && !order.shippedAt) {
       order.shippedAt = Date.now();
     }
-    
+
     if (status === 'delivered' && !order.deliveredAt) {
       order.deliveredAt = Date.now();
     }
-    
+
     if (status === 'cancelled' && !order.cancelledAt) {
       order.cancelledAt = Date.now();
-      
+
       // Return items to inventory
       for (const item of order.items) {
         const product = await Product.findById(item.product._id);
@@ -422,13 +456,13 @@ exports.updateOrderStatus = async (req, res) => {
         }
       }
     }
-    
+
     if (status === 'refunded' && !order.refundedAt) {
       order.refundedAt = Date.now();
     }
-    
+
     await order.save();
-    
+
     res.json({
       success: true,
       message: 'Orders status updated successfully',
@@ -452,9 +486,9 @@ exports.updateOrderStatus = async (req, res) => {
 exports.getSalesReport = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    
+
     let dateQuery = {};
-    
+
     if (startDate && endDate) {
       dateQuery = {
         createdAt: {
@@ -463,38 +497,44 @@ exports.getSalesReport = async (req, res) => {
         }
       };
     }
-    
+
     // Get total sales
     const totalSales = await Order.aggregate([
       { $match: { ...dateQuery, status: { $nin: ['cancelled', 'refunded'] } } },
-      { $group: {
-        _id: null,
-        total: { $sum: '$total' },
-        count: { $sum: 1 }
-      }}
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$total' },
+          count: { $sum: 1 }
+        }
+      }
     ]);
-    
+
     // Get sales by day
     const dailySales = await Order.aggregate([
       { $match: { ...dateQuery, status: { $nin: ['cancelled', 'refunded'] } } },
-      { $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-        sales: { $sum: '$total' },
-        count: { $sum: 1 }
-      }},
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          sales: { $sum: '$total' },
+          count: { $sum: 1 }
+        }
+      },
       { $sort: { _id: 1 } }
     ]);
-    
+
     // Get sales by status
     const salesByStatus = await Order.aggregate([
       { $match: dateQuery },
-      { $group: {
-        _id: '$status',
-        total: { $sum: '$total' },
-        count: { $sum: 1 }
-      }}
+      {
+        $group: {
+          _id: '$status',
+          total: { $sum: '$total' },
+          count: { $sum: 1 }
+        }
+      }
     ]);
-    
+
     res.json({
       success: true,
       totalSales: totalSales[0] ? totalSales[0].total : 0,
