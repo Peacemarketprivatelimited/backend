@@ -11,7 +11,7 @@ const adminRoutes = require('./src/routes/adminRoutes');
 const productRoutes = require('./src/routes/productRoutes');
 const categoryRoutes = require('./src/routes/categoryRoutes');
 const jazzcashRoutes = require('./src/routes/jazzcashRoutes')
-
+const withdrawalRoutes = require('./src/routes/withdrawalRoutes');
 // Load environment variables
 dotenv.config();
 
@@ -81,6 +81,10 @@ const adminLimiter = rateLimit({
 // Subscription routes
 const subscriptionRoutes = require('./src/routes/subscriptionRoutes');
 app.use('/api/subscription', subscriptionRoutes);
+
+// Withdrawal routes
+
+app.use('/api/withdrawals', withdrawalRoutes);
 
 // Run scheduled tasks
 const { checkExpiredSubscriptions } = require('./src/utils/scheduledTasks');
