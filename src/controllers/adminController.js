@@ -552,153 +552,158 @@ exports.getSalesReport = async (req, res) => {
   }
 };
 
-
-// ...existing code...
-// ...existing code...
+// Get all withdrawal requests
 exports.getAllWithdrawals = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 20,
-      status,            // optional: pending | approved | rejected
-      userSearch,        // optional: name/email/username fuzzy
-      sort = 'requestedAt',
-      order = 'desc'
-    } = req.query;
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
 
-    const pageNum = parseInt(page);
-    const lim = Math.min(parseInt(limit), 100);
-    const skip = (pageNum - 1) * lim;
+    // Find users with pending withdrawal requests
+    const usersWithWithdrawals = await User.find({
+      'withdrawals.pendingRequest': true
+    }).select('name username email withdrawals.totalWithdrawn withdrawals.bankAccount withdrawals.requestedAt withdrawals.amount withdrawals.status referral.totalEarnings').skip(skip).limit(limit);
 
-    // Base match: only users having at least one history entry
-    const baseMatch = { 'withdrawals.history.0': { $exists: true } };
+    // Count total withdrawal requests
+    const total = await User.countDocuments({
+      'withdrawals.pendingRequest': true
+    });
 
-    // Apply user search
-    if (userSearch) {
-      baseMatch.$or = [
-        { name: { $regex: userSearch, $options: 'i' } },
-        { email: { $regex: userSearch, $options: 'i' } },
-        { username: { $regex: userSearch, $options: 'i' } }
-      ];
-    }
-
-    const pipeline = [
-      { $match: baseMatch },
-      { $unwind: '$withdrawals.history' },
-      // Filter by withdrawal status if provided
-      ...(status ? [{ $match: { 'withdrawals.history.status': status } }] : []),
-      {
-        $project: {
-          _id: 0,
-          userId: '$_id',
-            name: 1,
-            username: 1,
-            email: 1,
-            bankAccount: '$withdrawals.bankAccount',
-            status: '$withdrawals.history.status',
-            requestedAt: '$withdrawals.history.requestedAt',
-            processedAt: '$withdrawals.history.processedAt',
-            amountRequested: '$withdrawals.history.amountRequested',
-            amountPaid: '$withdrawals.history.amountPaid',
-            adminNote: '$withdrawals.history.adminNote'
-        }
-      },
-      {
-        $sort: {
-          [sort]: order === 'asc' ? 1 : -1,
-          // tie-breaker
-          userId: 1
-        }
-      },
-      {
-        $facet: {
-          data: [{ $skip: skip }, { $limit: lim }],
-          total: [{ $count: 'count' }]
-        }
-      }
-    ];
-
-    const agg = await User.aggregate(pipeline);
-    const data = agg[0].data;
-    const total = agg[0].total[0] ? agg[0].total[0].count : 0;
+    // Format the withdrawals for admin panel
+    const withdrawals = usersWithWithdrawals.map(user => ({
+      userId: user._id,
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      amountPaid: user.withdrawals.amount || user.referral.totalEarnings,
+      requestedAt: user.withdrawals.requestedAt || new Date(),
+      bankAccount: user.withdrawals.bankAccount ? 
+        `${user.withdrawals.bankAccount.bankName} - ${user.withdrawals.bankAccount.accountNumber} (${user.withdrawals.bankAccount.accountHolder})` 
+        : 'No bank details provided',
+      status: user.withdrawals.status || 'pending'
+    }));
 
     res.json({
       success: true,
-      withdrawals: data,
+      withdrawals,
       pagination: {
         total,
-        page: pageNum,
-        limit: lim,
-        pages: Math.ceil(total / lim)
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
       }
     });
   } catch (error) {
+    console.error('Error getting withdrawals:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch withdrawals',
+      message: 'Error retrieving withdrawal requests',
       error: error.message
     });
   }
 };
-// ...existing code...
 
+// Approve a withdrawal request
 exports.approveWithdrawal = async (req, res) => {
   try {
-    const { userId, historyId, requestedAt, adminNote } = req.body;
+    const { userId, adminNote } = req.body;
+    
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
-
-    const findMatch = (w) => {
-      if (w.status !== 'pending') return false;
-      if (historyId) return String(w._id) === String(historyId);
-      if (requestedAt) return w.requestedAt.getTime() === new Date(requestedAt).getTime();
-      return false;
-    };
-
-    const withdrawal = user.withdrawals.history.find(findMatch);
-    if (!withdrawal) return res.status(404).json({ success: false, message: "Withdrawal not found" });
-
-    withdrawal.status = 'approved';
-    withdrawal.processedAt = new Date();
-    withdrawal.adminNote = adminNote || '';
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    if (!user.withdrawals.pendingRequest) {
+      return res.status(400).json({
+        success: false,
+        message: 'No pending withdrawal request found'
+      });
+    }
+    
+    // Update user document
     user.withdrawals.pendingRequest = false;
-    user.withdrawals.lastWithdrawalDate = new Date();
-    user.withdrawals.totalWithdrawn = (user.withdrawals.totalWithdrawn || 0) + Number(withdrawal.amountPaid || 0);
-
-    // Reset earnings after paying out
+    user.withdrawals.totalWithdrawn += user.referral.totalEarnings;
+    user.withdrawals.history = user.withdrawals.history || [];
+    
+    // Add to history
+    user.withdrawals.history.push({
+      amount: user.referral.totalEarnings,
+      status: 'approved',
+      requestedAt: user.withdrawals.requestedAt || new Date(),
+      processedAt: new Date(),
+      adminNote: adminNote || ''
+    });
+    
+    // Reset earnings after withdrawal
     user.referral.totalEarnings = 0;
-
+    
     await user.save();
-    res.json({ success: true, message: "Withdrawal approved", withdrawal });
+    
+    res.json({
+      success: true,
+      message: 'Withdrawal request approved successfully'
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to approve withdrawal", error: error.message });
+    console.error('Error approving withdrawal:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing withdrawal approval',
+      error: error.message
+    });
   }
 };
 
+// Reject a withdrawal request
 exports.rejectWithdrawal = async (req, res) => {
   try {
-    const { userId, historyId, requestedAt, adminNote } = req.body;
+    const { userId, adminNote } = req.body;
+    
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
-
-    const findMatch = (w) => {
-      if (w.status !== 'pending') return false;
-      if (historyId) return String(w._id) === String(historyId);
-      if (requestedAt) return w.requestedAt.getTime() === new Date(requestedAt).getTime();
-      return false;
-    };
-
-    const withdrawal = user.withdrawals.history.find(findMatch);
-    if (!withdrawal) return res.status(404).json({ success: false, message: "Withdrawal not found" });
-
-    withdrawal.status = 'rejected';
-    withdrawal.processedAt = new Date();
-    withdrawal.adminNote = adminNote || '';
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    if (!user.withdrawals.pendingRequest) {
+      return res.status(400).json({
+        success: false,
+        message: 'No pending withdrawal request found'
+      });
+    }
+    
+    // Update user document
     user.withdrawals.pendingRequest = false;
-
+    user.withdrawals.history = user.withdrawals.history || [];
+    
+    // Add to history
+    user.withdrawals.history.push({
+      amount: user.referral.totalEarnings,
+      status: 'rejected',
+      requestedAt: user.withdrawals.requestedAt || new Date(),
+      processedAt: new Date(),
+      adminNote: adminNote || ''
+    });
+    
     await user.save();
-    res.json({ success: true, message: "Withdrawal rejected", withdrawal });
+    
+    res.json({
+      success: true,
+      message: 'Withdrawal request rejected successfully'
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to reject withdrawal", error: error.message });
+    console.error('Error rejecting withdrawal:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing withdrawal rejection',
+      error: error.message
+    });
   }
 };

@@ -72,24 +72,23 @@ const userSchema = new mongoose.Schema(
 
     // Withdrawal Data
     withdrawals: {
-      bankAccount: {
-        accountNumber: { type: String, trim: true },
-        bankName: { type: String, trim: true },
-        accountHolder: { type: String, trim: true }
-      },
       pendingRequest: { type: Boolean, default: false },
-      lastWithdrawalDate: { type: Date },
       totalWithdrawn: { type: Number, default: 0 },
-      history: [
-        {
-          amountRequested: Number,
-          amountPaid: Number,
-          status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-          requestedAt: Date,
-          processedAt: Date,
-          adminNote: String
-        }
-      ]
+      requestedAt: { type: Date },
+      amount: { type: Number },
+      status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+      bankAccount: {
+        accountNumber: String,
+        bankName: String,
+        accountHolder: String
+      },
+      history: [{
+        amount: Number,
+        status: { type: String, enum: ['approved', 'rejected'] },
+        requestedAt: Date,
+        processedAt: Date,
+        adminNote: String
+      }]
     },
 
     createdAt: { type: Date, default: Date.now },

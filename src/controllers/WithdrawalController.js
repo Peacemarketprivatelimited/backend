@@ -3,54 +3,53 @@ const User = require("../models/User");
 // User withdrawal request controller
 exports.requestWithdrawal = async (req, res) => {
   try {
+    const { bankAccount } = req.body;
     const userId = req.user.id;
+
     const user = await User.findById(userId);
-
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
-
-    // Require bank details
-    if (!user.withdrawals || !user.withdrawals.bankAccount || !user.withdrawals.bankAccount.accountNumber) {
-      return res.status(400).json({ success: false, message: "Please update your bank details first" });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
 
-    // Prevent duplicate pending
     if (user.withdrawals.pendingRequest) {
-      return res.status(400).json({ success: false, message: "You already have a pending withdrawal request" });
+      return res.status(400).json({
+        success: false,
+        message: 'You already have a pending withdrawal request'
+      });
     }
 
-    const gross = Number(user.referral?.totalEarnings || 0);
-    if (!gross || gross <= 0) {
-      return res.status(400).json({ success: false, message: "You don't have any earnings to withdraw" });
+    if (user.referral.totalEarnings <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'You do not have any earnings to withdraw'
+      });
     }
 
-    // 10% fee → pay 90%
-    const net = Math.round(gross * 0.9 * 100) / 100;
-
-    const entry = {
-      status: 'pending',
-      requestedAt: new Date(),
-      processedAt: null,
-      amountRequested: gross,
-      amountPaid: net,
-      adminNote: ''
-    };
-
-    user.withdrawals = user.withdrawals || {};
-    user.withdrawals.history = user.withdrawals.history || [];
-    user.withdrawals.history.push(entry);
+    // Update user withdrawal info
     user.withdrawals.pendingRequest = true;
+    user.withdrawals.requestedAt = new Date();
+    user.withdrawals.amount = user.referral.totalEarnings;
+    
+    // Set bank account details if provided
+    if (bankAccount) {
+      user.withdrawals.bankAccount = bankAccount;
+    }
 
     await user.save();
 
-    // return historyId so admin can approve by id (more reliable than matching timestamps)
-    const created = user.withdrawals.history[user.withdrawals.history.length - 1];
-    return res.json({
+    res.status(201).json({
       success: true,
-      message: "Withdrawal request submitted successfully",
-      historyId: created._id,
-      requestedAt: created.requestedAt
+      message: 'Withdrawal request submitted successfully'
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: "Failed to request withdrawal", error: error.message });
+    console.error('Error requesting withdrawal:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing withdrawal request',
+      error: error.message
+    });
   }
 };
