@@ -8,47 +8,49 @@ exports.requestWithdrawal = async (req, res) => {
 
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    // Only allow requests on Sunday
-    const today = new Date();
-    if (today.getDay() !== 0) {
-      return res.status(400).json({ success: false, message: "Withdrawals are only open on Sundays" });
+    // Require bank details
+    if (!user.withdrawals || !user.withdrawals.bankAccount || !user.withdrawals.bankAccount.accountNumber) {
+      return res.status(400).json({ success: false, message: "Please update your bank details first" });
     }
 
-    // Check for pending request
+    // Prevent duplicate pending
     if (user.withdrawals.pendingRequest) {
       return res.status(400).json({ success: false, message: "You already have a pending withdrawal request" });
     }
 
-    // Check earnings
-    if (user.referral.totalEarnings <= 0) {
-      return res.status(400).json({ success: false, message: "No earnings to withdraw" });
+    const gross = Number(user.referral?.totalEarnings || 0);
+    if (!gross || gross <= 0) {
+      return res.status(400).json({ success: false, message: "You don't have any earnings to withdraw" });
     }
 
-    // 10% deduction
-    const amountRequested = user.referral.totalEarnings;
-    const amountPaid = Math.floor(amountRequested * 0.9);
+    // 10% fee → pay 90%
+    const net = Math.round(gross * 0.9 * 100) / 100;
 
-    // Add to history
-    user.withdrawals.history.push({
-      amountRequested,
-      amountPaid,
+    const entry = {
       status: 'pending',
-      requestedAt: today
-    });
+      requestedAt: new Date(),
+      processedAt: null,
+      amountRequested: gross,
+      amountPaid: net,
+      adminNote: ''
+    };
 
+    user.withdrawals = user.withdrawals || {};
+    user.withdrawals.history = user.withdrawals.history || [];
+    user.withdrawals.history.push(entry);
     user.withdrawals.pendingRequest = true;
+
     await user.save();
 
-    res.status(200).json({
+    // return historyId so admin can approve by id (more reliable than matching timestamps)
+    const created = user.withdrawals.history[user.withdrawals.history.length - 1];
+    return res.json({
       success: true,
-      message: "Withdrawal request submitted",
-      withdrawal: {
-        amountRequested,
-        amountPaid,
-        status: 'pending'
-      }
+      message: "Withdrawal request submitted successfully",
+      historyId: created._id,
+      requestedAt: created.requestedAt
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to submit withdrawal", error: error.message });
+    return res.status(500).json({ success: false, message: "Failed to request withdrawal", error: error.message });
   }
 };
