@@ -554,29 +554,93 @@ exports.getSalesReport = async (req, res) => {
 
 
 // ...existing code...
+// ...existing code...
 exports.getAllWithdrawals = async (req, res) => {
   try {
-    const users = await User.find({ "withdrawals.history.0": { $exists: true } })
-      .select("name username email withdrawals.history withdrawals.bankAccount");
-    // Flatten all withdrawal requests
-    const withdrawals = [];
-    users.forEach(user => {
-      user.withdrawals.history.forEach(w => {
-        withdrawals.push({
-          userId: user._id,
-          name: user.name,
-          username: user.username,
-          email: user.email,
-          bankAccount: user.withdrawals.bankAccount,
-          ...w
-        });
-      });
+    const {
+      page = 1,
+      limit = 20,
+      status,            // optional: pending | approved | rejected
+      userSearch,        // optional: name/email/username fuzzy
+      sort = 'requestedAt',
+      order = 'desc'
+    } = req.query;
+
+    const pageNum = parseInt(page);
+    const lim = Math.min(parseInt(limit), 100);
+    const skip = (pageNum - 1) * lim;
+
+    // Base match: only users having at least one history entry
+    const baseMatch = { 'withdrawals.history.0': { $exists: true } };
+
+    // Apply user search
+    if (userSearch) {
+      baseMatch.$or = [
+        { name: { $regex: userSearch, $options: 'i' } },
+        { email: { $regex: userSearch, $options: 'i' } },
+        { username: { $regex: userSearch, $options: 'i' } }
+      ];
+    }
+
+    const pipeline = [
+      { $match: baseMatch },
+      { $unwind: '$withdrawals.history' },
+      // Filter by withdrawal status if provided
+      ...(status ? [{ $match: { 'withdrawals.history.status': status } }] : []),
+      {
+        $project: {
+          _id: 0,
+          userId: '$_id',
+            name: 1,
+            username: 1,
+            email: 1,
+            bankAccount: '$withdrawals.bankAccount',
+            status: '$withdrawals.history.status',
+            requestedAt: '$withdrawals.history.requestedAt',
+            processedAt: '$withdrawals.history.processedAt',
+            amountRequested: '$withdrawals.history.amountRequested',
+            amountPaid: '$withdrawals.history.amountPaid',
+            adminNote: '$withdrawals.history.adminNote'
+        }
+      },
+      {
+        $sort: {
+          [sort]: order === 'asc' ? 1 : -1,
+          // tie-breaker
+          userId: 1
+        }
+      },
+      {
+        $facet: {
+          data: [{ $skip: skip }, { $limit: lim }],
+          total: [{ $count: 'count' }]
+        }
+      }
+    ];
+
+    const agg = await User.aggregate(pipeline);
+    const data = agg[0].data;
+    const total = agg[0].total[0] ? agg[0].total[0].count : 0;
+
+    res.json({
+      success: true,
+      withdrawals: data,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: lim,
+        pages: Math.ceil(total / lim)
+      }
     });
-    res.json({ success: true, withdrawals });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to fetch withdrawals", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch withdrawals',
+      error: error.message
+    });
   }
 };
+// ...existing code...
 
 exports.approveWithdrawal = async (req, res) => {
   try {
