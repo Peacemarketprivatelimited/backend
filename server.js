@@ -11,7 +11,7 @@ const adminRoutes = require('./src/routes/adminRoutes');
 const productRoutes = require('./src/routes/productRoutes');
 const categoryRoutes = require('./src/routes/categoryRoutes');
 const jazzcashRoutes = require('./src/routes/jazzcashRoutes')
-const withdrawalRoutes = require('./src/routes/withdrawalRoutes');
+
 // Load environment variables
 dotenv.config();
 
@@ -45,7 +45,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // CORS middleware
 app.use(cors({
-  origin: ['http://localhost:5173','http://localhost:5174'], // <-- set your frontend/admin domain here
+  origin: ['https://admin.peace-market.com','https://peace-market.com'], // <-- set your frontend/admin domain here
   credentials: true
 }));
 
@@ -81,10 +81,6 @@ const adminLimiter = rateLimit({
 // Subscription routes
 const subscriptionRoutes = require('./src/routes/subscriptionRoutes');
 app.use('/api/subscription', subscriptionRoutes);
-
-// Withdrawal routes
-
-app.use('/api/withdrawals', withdrawalRoutes);
 
 // Run scheduled tasks
 const { checkExpiredSubscriptions } = require('./src/utils/scheduledTasks');
