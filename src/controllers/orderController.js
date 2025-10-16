@@ -1,291 +1,101 @@
+const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const User = require('../models/User');
-const mongoose = require('mongoose');
 
-/**
- * @desc    Create a new order
- * @route   POST /api/orders
- * @access  Private (User)
- */
-// exports.createOrder = async (req, res) => {
-//   try {
-//     const {
-//       items,
-//       shippingAddress,
-//       billingAddress,
-//       payment,
-//       notes
-//     } = req.body;
-
-//     // Validate items exist
-//     if (!items || items.length === 0) {
-//       return res.status(400).json({
-//         success: false,
-//         message: 'No items in the order'
-//       });
-//     }
-
-//     // Validate required fields
-//     if (!shippingAddress) {
-//       return res.status(400).json({
-//         success: false,
-//         message: 'Shipping address is required'
-//       });
-//     }
-
-//     // Get user details
-   
-
-//     // Calculate order totals
-//     let subtotal = 0;
-//     let orderItems = [];
-    
-//     // Process each item
-//     for (const item of items) {
-//       const product = await Product.findById(item.productId);
-      
-//       if (!product) {
-//         return res.status(404).json({
-//           success: false,
-//           message: `Product not found: ${item.productId}`
-//         });
-//       }
-      
-//       // Check if product is active and in stock
-//       if (!product.status.active || !product.status.inStock) {
-//         return res.status(400).json({
-//           success: false,
-//           message: `Product "${product.name}" is not available for purchase`
-//         });
-//       }
-      
-//       // Check if quantity is available
-//       if (item.quantity > product.quantity) {
-//         return res.status(400).json({
-//           success: false,
-//           message: `Insufficient stock for "${product.name}". Available: ${product.quantity}`
-//         });
-//       }
-      
-//       // Calculate item price with discount
-//       let itemPrice = product.price;
-//       let discountAmount = 0;
-      
-//       if (product.discount && product.discount.regular && product.discount.regular.active) {
-//         discountAmount = (itemPrice * product.discount.regular.percentage) / 100;
-//         itemPrice = itemPrice - discountAmount;
-//       }
-      
-//       // Add item to order
-//       const orderItem = {
-//         product: {
-//           _id: product._id,
-//           name: product.name,
-//           slug: product.slug,
-//           price: product.price,
-//           image: product.images && product.images.length > 0 ? {
-//             url: product.images[0].url,
-//             alt: product.images[0].alt || product.name
-//           } : null
-//         },
-//         quantity: item.quantity,
-//         price: itemPrice,
-//         discount: discountAmount,
-//         totalPrice: itemPrice * item.quantity
-//       };
-      
-//       orderItems.push(orderItem);
-//       subtotal += orderItem.totalPrice;
-      
-//       // Update product inventory (decrease quantity)
-//       product.quantity -= item.quantity;
-//       await product.save();
-//     }
-    
-//     // Calculate shipping cost, tax, and total
-//     // You can customize this based on your business rules
-//     const shippingCost = 10; // Example flat rate
-//     const taxRate = 0.07; // Example 7% tax
-//     const taxAmount = subtotal * taxRate;
-//     const total = subtotal + shippingCost + taxAmount;
-    
-//     // Create new order
-//     const order = new Orders({
-//       user: {
-//         _id: user._id,
-//         name: user.name,
-//         email: user.email
-//       },
-//       items: orderItems,
-//       shippingAddress,
-//       billingAddress: billingAddress || { sameAsShipping: true, address: shippingAddress },
-//       payment: {
-//         ...payment,
-//         amount: total
-//       },
-//       subtotal,
-//       shippingCost,
-//       tax: taxAmount,
-//       total,
-//       notes
-//     });
-    
-//     await order.save();
-    
-//     res.status(201).json({
-//       success: true,
-//       message: 'Orders created successfully',
-//       order
-//     });
-//   } catch (error) {
-//     console.error('Error creating order:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Failed to create order',
-//       error: error.message
-//     });
-//   }
-// };
-
-function generateOrderNumber() {
-  return 'ORD-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+// Helper: is the subscription discount active for a product?
+function getSubscriptionDiscountPct(product) {
+  try {
+    if (!product?.discount?.subscription?.active) return 0;
+    const pct = Number(product.discount.subscription.percentage || 0);
+    if (pct <= 0) return 0;
+    return Math.min(Math.max(pct, 0), 100);
+  } catch {
+    return 0;
+  }
 }
 
+// Create order (full price charged; store walletCredit amount)
 exports.createOrder = async (req, res) => {
   try {
-    const {
-      name,
-      email,
-      phoneNumber,
-      address,
-      notes,
-      payment,
-      items
-    } = req.body;
+    const userId = req.user.id;
+    const { items, shipping = 0, paymentMethod = 'COD' } = req.body;
 
-    // Validate required fields
-    if (!name || !email || !phoneNumber || !address || !payment || !items || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields'
-      });
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'No items provided' });
     }
 
-    // Only authenticated users can place orders
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required to place an order'
-      });
-    }
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(userId).select('subscription referral.totalEarnings');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    // Calculate order totals
-    let subtotal = 0;
+    // Build items at full price and compute wallet credit (if user is subscribed)
+    const now = new Date();
+    const isSubscribed = user.subscription?.isActive && (!user.subscription.expiryDate || user.subscription.expiryDate > now);
+
     let orderItems = [];
+    let subtotal = 0;
+    let walletCreditTotal = 0;
 
-    for (const item of items) {
-      const product = await Product.findById(item.productId);
-
+    for (const line of items) {
+      const product = await Product.findById(line.productId).select('name price discount');
       if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: `Product not found: ${item.productId}`
-        });
+        return res.status(400).json({ success: false, message: `Product not found: ${line.productId}` });
+      }
+      const qty = Math.max(1, Number(line.quantity || 1));
+      const unitPrice = Number(product.price || 0); // full price
+      const lineTotal = unitPrice * qty;
+
+      let subPct = 0;
+      let credited = 0;
+
+      if (isSubscribed) {
+        subPct = getSubscriptionDiscountPct(product); // 0..100
+        if (subPct > 0) {
+          const perUnitDiscount = (unitPrice * subPct) / 100;
+          credited = Math.round(perUnitDiscount * qty * 100) / 100; // round 2 decimals
+          walletCreditTotal += credited;
+        }
       }
 
-      if (!product.status.active || !product.status.inStock) {
-        return res.status(400).json({
-          success: false,
-          message: `Product "${product.name}" is not available for purchase`
-        });
-      }
-
-      if (item.quantity > product.quantity) {
-        return res.status(400).json({
-          success: false,
-          message: `Insufficient stock for "${product.name}". Available: ${product.quantity}`
-        });
-      }
-
-      let itemPrice = product.price;
-      let discountAmount = 0;
-
-      if (product.discount && product.discount.regular && product.discount.regular.active) {
-        discountAmount = (itemPrice * product.discount.regular.percentage) / 100;
-        itemPrice = itemPrice - discountAmount;
-      }
-
-      const orderItem = {
-        product: {
-          _id: product._id,
-          name: product.name,
-          slug: product.slug,
-          price: product.price,
-          image: product.images && product.images.length > 0 ? {
-            url: product.images[0].url,
-            alt: product.images[0].alt || product.name
-          } : null
-        },
-        quantity: item.quantity,
-        price: itemPrice,
-        discount: discountAmount,
-        totalPrice: itemPrice * item.quantity
-      };
-
-      orderItems.push(orderItem);
-      subtotal += orderItem.totalPrice;
-
-      product.quantity -= item.quantity;
-      await product.save();
+      orderItems.push({
+        product: product._id,
+        name: product.name,
+        price: unitPrice,                        // full price
+        quantity: qty,
+        subscriptionDiscountPercentage: subPct,  // audit only
+        subscriptionDiscountCredited: credited   // audit only
+      });
+      subtotal += lineTotal;
     }
 
-    const shippingCost = 10;
-    const taxRate = 0.07;
-    const taxAmount = subtotal * taxRate;
-    const total = subtotal + shippingCost + taxAmount;
+    const total = subtotal + Number(shipping || 0);
 
-    // Prepare order data
-    const orderData = {
-      orderNumber: generateOrderNumber(),
-      user: {
-        _id: user._id,
-        name,
-        email
-      },
+    const order = await Order.create({
+      user: userId,
       items: orderItems,
-      shippingAddress: address,
-      billingAddress: { address },
-      phoneNumber,
-      payment: {
-        ...payment,
-        amount: total
-      },
       subtotal,
-      shippingCost,
-      tax: taxAmount,
+      shipping,
       total,
-      notes
-    };
+      paymentMethod,
+      paymentStatus: paymentMethod === 'COD' ? 'pending' : 'pending',
+      status: 'created',
+      walletCredit: {
+        amount: walletCreditTotal,
+        credited: false
+      }
+    });
 
-    const order = new Order(orderData);
-    await order.save();
-
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: 'Orders created successfully',
+      message: 'Order created',
       order
     });
   } catch (error) {
-    console.error('Error creating order:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create order',
-      error: error.message
-    });
+    console.error('createOrder error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to create order', error: error.message });
   }
 };
+
 /**
  * @desc    Get all orders for logged in user
  * @route   GET /api/orders
@@ -570,5 +380,85 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       message: 'Failed to update order status by admin',
       error: error.message
     });
+  }
+};
+
+/**
+ * @desc    Credit wallet for order (admin only)
+ * @route   POST /api/orders/:orderId/credit-wallet
+ * @access  Private (Admin)
+ */
+exports.creditWalletForOrder = async (req, res) => {
+  const session = await mongoose.startSession();
+  try {
+    const { orderId } = req.params;
+    const adminTriggered = !!req.user?.role && (req.user.role === 'admin' || req.user.role === 'superadmin');
+
+    let creditedAmount = 0;
+
+    await session.withTransaction(async () => {
+      const order = await Order.findById(orderId).session(session);
+      if (!order) throw new Error('Order not found');
+
+      // Idempotent: already credited
+      if (order.walletCredit && order.walletCredit.credited) {
+        creditedAmount = Number(order.walletCredit.amount || 0);
+        return;
+      }
+
+      // Only allow crediting after delivery (admin approves post-delivery)
+      if (order.status !== 'delivered') {
+        throw new Error('Order must be delivered before wallet credit can be approved');
+      }
+
+      // Calculate amount
+      const amount = Number(order.walletCredit?.amount || 0);
+      creditedAmount = amount;
+
+      // If nothing to credit, still mark credited to avoid future attempts
+      if (amount <= 0) {
+        order.walletCredit = order.walletCredit || {};
+        order.walletCredit.credited = true;
+        order.walletCredit.creditedAt = new Date();
+        await order.save({ session });
+        return;
+      }
+
+      // Increment user's wallet (using referral.totalEarnings per spec)
+      const user = await User.findById(order.user).session(session).select('_id referral.totalEarnings');
+      if (!user) throw new Error('User not found for order');
+
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $inc: {
+            'referral.totalEarnings': amount,
+            'referral.earningsByLevel.level1': amount // optional audit increment
+          }
+        },
+        { session }
+      );
+
+      // Mark order credited
+      order.walletCredit = order.walletCredit || {};
+      order.walletCredit.credited = true;
+      order.walletCredit.creditedAt = new Date();
+      await order.save({ session });
+    });
+
+    const updated = await Order.findById(orderId).select('walletCredit');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Wallet credited',
+      orderId,
+      amount: creditedAmount,
+      walletCredit: updated.walletCredit
+    });
+  } catch (error) {
+    console.error('creditWalletForOrder error:', error);
+    return res.status(400).json({ success: false, message: error.message });
+  } finally {
+    session.endSession();
   }
 };
