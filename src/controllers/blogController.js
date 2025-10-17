@@ -141,7 +141,22 @@ exports.updateBlog = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
- 
+exports.getBlogByIdAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid blog id' });
+    }
+    const blog = await Blog.findById(id).populate('author', 'name username email');
+    if (!blog) {
+      return res.status(404).json({ success: false, message: 'Blog not found' });
+    }
+    res.json({ success: true, blog });
+  } catch (error) {
+    console.error('getBlogByIdAdmin error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 exports.deleteBlog = async (req, res) => {
   try {
     const { id } = req.params;

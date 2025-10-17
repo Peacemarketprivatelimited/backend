@@ -68,6 +68,7 @@ router.get('/blogs', hasPermission('manageProducts'), blogController.getAllBlogs
 // Create blog with optional featuredImage file (field name: featuredImage)
 router.post('/blogs', hasPermission('manageProducts'), upload.single('featuredImage'), blogController.createBlog);
 // Update blog with optional featuredImage file
+router.get('/blogs/:id', hasPermission('manageProducts'), blogController.getBlogByIdAdmin);
 router.put('/blogs/:id', hasPermission('manageProducts'), upload.single('featuredImage'), blogController.updateBlog);
 router.delete('/blogs/:id', hasPermission('manageProducts'), blogController.deleteBlog);
 
