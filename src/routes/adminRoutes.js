@@ -72,4 +72,11 @@ router.get('/blogs/:id', hasPermission('manageProducts'), blogController.getBlog
 router.put('/blogs/:id', hasPermission('manageProducts'), upload.single('featuredImage'), blogController.updateBlog);
 router.delete('/blogs/:id', hasPermission('manageProducts'), blogController.deleteBlog);
 
+// Deliver and credit wallet for an order
+router.post(
+  '/orders/:orderId/deliver-and-credit',
+  hasPermission('manageOrders'),
+  orderController.deliverAndCreditWallet
+);
+
 module.exports = router;

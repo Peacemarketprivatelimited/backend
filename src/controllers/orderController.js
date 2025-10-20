@@ -462,3 +462,77 @@ exports.creditWalletForOrder = async (req, res) => {
     session.endSession();
   }
 };
+
+/**
+ * @desc    Deliver order and credit wallet (if applicable)
+ * @route   POST /api/orders/:orderId/deliver-credit
+ * @access  Private (Admin)
+ */
+exports.deliverAndCreditWallet = async (req, res) => {
+  const session = await mongoose.startSession();
+  try {
+    const { orderId } = req.params;
+    let creditedAmount = 0;
+
+    await session.withTransaction(async () => {
+      // 1. Find order
+      const order = await Order.findById(orderId).session(session);
+      if (!order) throw new Error('Order not found');
+
+      // 2. Update status to delivered if not already
+      if (order.status !== 'delivered') {
+        order.status = 'delivered';
+        order.deliveredAt = new Date();
+        await order.save({ session });
+      }
+
+      // 3. Find user and check subscription
+      const user = await User.findById(order.user).session(session).select('subscription referral.totalEarnings');
+      if (!user) throw new Error('User not found for order');
+
+      const now = new Date();
+      const isSubscribed = user.subscription?.isActive && (!user.subscription.expiryDate || user.subscription.expiryDate > now);
+
+      // 4. Only credit wallet if subscribed and not already credited
+      if (isSubscribed && order.walletCredit && !order.walletCredit.credited) {
+        const amount = Number(order.walletCredit.amount || 0);
+        creditedAmount = amount;
+
+        if (amount > 0) {
+          await User.updateOne(
+            { _id: user._id },
+            {
+              $inc: {
+                'referral.totalEarnings': amount,
+                'referral.earningsByLevel.level1': amount
+              }
+            },
+            { session }
+          );
+        }
+
+        order.walletCredit.credited = true;
+        order.walletCredit.creditedAt = new Date();
+        await order.save({ session });
+      }
+    });
+
+    const updatedOrder = await Order.findById(orderId).select('status walletCredit deliveredAt');
+    return res.status(200).json({
+      success: true,
+      message: updatedOrder.walletCredit.credited
+        ? 'Order delivered and wallet credited'
+        : 'Order delivered (no wallet credit: user not subscribed or already credited)',
+      orderId,
+      status: updatedOrder.status,
+      deliveredAt: updatedOrder.deliveredAt,
+      walletCredit: updatedOrder.walletCredit,
+      creditedAmount: updatedOrder.walletCredit.amount
+    });
+  } catch (error) {
+    console.error('deliverAndCreditWallet error:', error);
+    return res.status(400).json({ success: false, message: error.message });
+  } finally {
+    session.endSession();
+  }
+};
