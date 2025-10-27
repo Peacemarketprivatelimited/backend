@@ -19,10 +19,36 @@ function getSubscriptionDiscountPct(product) {
 exports.createOrder = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { items, shipping = 0, paymentMethod = 'COD' } = req.body;
+    const {
+      items,
+      shipping = 0,
+      payment,
+      billingAddress,
+      shippingAddress,
+      orderNumber,
+      status = 'pending',
+      phoneNumber
+    } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'No items provided' });
+    }
+
+    // Validate required fields
+    if (!shippingAddress || typeof shippingAddress !== 'string') {
+      return res.status(400).json({ success: false, message: 'shippingAddress is required and must be a string' });
+    }
+    if (!billingAddress || typeof billingAddress.address !== 'string') {
+      return res.status(400).json({ success: false, message: 'billingAddress.address is required' });
+    }
+    if (!orderNumber) {
+      return res.status(400).json({ success: false, message: 'orderNumber is required' });
+    }
+    if (!phoneNumber) {
+      return res.status(400).json({ success: false, message: 'phoneNumber is required' });
+    }
+    if (!payment || typeof payment.method !== 'string') {
+      return res.status(400).json({ success: false, message: 'payment.method is required' });
     }
 
     const user = await User.findById(userId).select('subscription referral.totalEarnings');
@@ -70,15 +96,22 @@ exports.createOrder = async (req, res) => {
 
     const total = subtotal + Number(shipping || 0);
 
+    // Only allow valid statuses
+    const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
+    const orderStatus = validStatuses.includes(status) ? status : 'pending';
+
     const order = await Order.create({
       user: userId,
       items: orderItems,
+      orderNumber,
+      shippingAddress,
+      billingAddress,
+      payment,
       subtotal,
       shipping,
       total,
-      paymentMethod,
-      paymentStatus: paymentMethod === 'COD' ? 'pending' : 'pending',
-      status: 'created',
+      status: orderStatus,
+      phoneNumber,
       walletCredit: {
         amount: walletCreditTotal,
         credited: false
