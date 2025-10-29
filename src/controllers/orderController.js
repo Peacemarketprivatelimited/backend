@@ -27,14 +27,16 @@ exports.createOrder = async (req, res) => {
       shippingAddress,
       orderNumber,
       status = 'pending',
-      phoneNumber
+      phoneNumber,
+      subtotal,
+      tax = 0,
+      total
     } = req.body;
 
+    // Validate required fields
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'No items provided' });
     }
-
-    // Validate required fields
     if (!shippingAddress || typeof shippingAddress !== 'string') {
       return res.status(400).json({ success: false, message: 'shippingAddress is required and must be a string' });
     }
@@ -50,65 +52,55 @@ exports.createOrder = async (req, res) => {
     if (!payment || typeof payment.method !== 'string') {
       return res.status(400).json({ success: false, message: 'payment.method is required' });
     }
+    if (typeof subtotal !== 'number' || typeof total !== 'number') {
+      return res.status(400).json({ success: false, message: 'subtotal and total must be numbers' });
+    }
 
     const user = await User.findById(userId).select('subscription referral.totalEarnings');
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    // Build items at full price and compute wallet credit (if user is subscribed)
+    // Accept items as sent from frontend (no backend price calculation)
+    let orderItems = [];
+    let walletCreditTotal = 0;
     const now = new Date();
     const isSubscribed = user.subscription?.isActive && (!user.subscription.expiryDate || user.subscription.expiryDate > now);
 
-    let orderItems = [];
-    let subtotal = 0;
-    let walletCreditTotal = 0;
-
     for (const line of items) {
-      const product = await Product.findById(line.productId).select('name price discount');
-      if (!product) {
-        return res.status(400).json({ success: false, message: `Product not found: ${line.productId}` });
-      }
-      const qty = Math.max(1, Number(line.quantity || 1));
-      const unitPrice = Number(product.price || 0); // full price
-      const lineTotal = unitPrice * qty;
-
+      // Optionally, you can fetch product and validate price here if you want
       let subPct = 0;
       let credited = 0;
-
-      if (isSubscribed) {
-        subPct = getSubscriptionDiscountPct(product); // 0..100
-        if (subPct > 0) {
-          const perUnitDiscount = (unitPrice * subPct) / 100;
-          credited = Math.round(perUnitDiscount * qty * 100) / 100; // round 2 decimals
-          walletCreditTotal += credited;
-        }
+      if (isSubscribed && line.subscriptionDiscountPercentage && line.subscriptionDiscountCredited) {
+        subPct = line.subscriptionDiscountPercentage;
+        credited = line.subscriptionDiscountCredited;
+        walletCreditTotal += credited;
       }
-
       orderItems.push({
-        product: product._id,
-        name: product.name,
-        price: unitPrice,                        // full price
-        quantity: qty,
-        subscriptionDiscountPercentage: subPct,  // audit only
-        subscriptionDiscountCredited: credited   // audit only
+        product: line.productId,
+        name: line.name,
+        price: line.price,
+        quantity: line.quantity,
+        subscriptionDiscountPercentage: subPct,
+        subscriptionDiscountCredited: credited
       });
-      subtotal += lineTotal;
     }
-
-    const total = subtotal + Number(shipping || 0);
 
     // Only allow valid statuses
     const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
     const orderStatus = validStatuses.includes(status) ? status : 'pending';
 
+    // Always generate orderNumber in backend
+    const finalOrderNumber = generateOrderNumber();
+
     const order = await Order.create({
       user: userId,
       items: orderItems,
-      orderNumber,
+      orderNumber: finalOrderNumber,
       shippingAddress,
       billingAddress,
       payment,
       subtotal,
       shipping,
+      tax,
       total,
       status: orderStatus,
       phoneNumber,
@@ -569,3 +561,11 @@ exports.deliverAndCreditWallet = async (req, res) => {
     session.endSession();
   }
 };
+
+function generateOrderNumber() {
+  // Example: ORD20250729-123456 (ORD + YYYYMMDD + random 6 digits)
+  const now = new Date();
+  const datePart = now.toISOString().slice(0,10).replace(/-/g, '');
+  const randPart = Math.floor(100000 + Math.random() * 900000);
+  return `ORD${datePart}-${randPart}`;
+}
