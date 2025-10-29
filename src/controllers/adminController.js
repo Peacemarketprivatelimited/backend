@@ -400,26 +400,24 @@ exports.getOrderById = async (req, res) => {
  * @route   PUT /api/admin/orders/:id/status
  * @access  Private (Admin)
  */
+// ...existing code...
+// ...existing code...
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status, trackingNumber, trackingUrl, notes } = req.body;
 
     if (!status) {
-      return res.status(400).json({
-        success: false,
-        message: 'Status is required'
-      });
+      return res.status(400).json({ success: false, message: 'Status is required' });
     }
 
     // Populate user for wallet logic
     const order = await Order.findById(req.params.id).populate('user');
 
     if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Orders not found'
-      });
+      return res.status(404).json({ success: false, message: 'Orders not found' });
     }
+
+    const previousStatus = order.status; // remember previous status to avoid double-credit
 
     // Update order fields
     order.status = status;
@@ -434,28 +432,86 @@ exports.updateOrderStatus = async (req, res) => {
       order.cancelledAt = Date.now();
       // Return items to inventory
       for (const item of order.items) {
-        const product = await Product.findById(item.product._id);
+        const product = await Product.findById(item.product?._id || item.product);
         if (product) {
-          product.quantity += item.quantity;
+          product.quantity += item.quantity || 0;
           await product.save();
         }
       }
     }
     if (status === 'refunded' && !order.refundedAt) order.refundedAt = Date.now();
 
-    // 💡 Wallet credit logic on delivery
+    // Wallet credit logic on delivery
+    // - only when transitioning INTO delivered
+    // - only if user has active subscription
+    // - only if order.walletCredit not already marked credited
+    const populatedUser = order.user;
+    const alreadyCredited = order.walletCredit?.credited === true;
+
+    // Extra safety: load fresh user doc from User model to ensure .save() works
+    const user = populatedUser ? await User.findById(populatedUser._id || populatedUser) : null;
+
+    // Determine subscription active flag (robust against different shapes)
+    const userHasActiveSubscription =
+      !!(
+        user &&
+        (
+          (user.subscription && user.subscription.isActive) ||
+          user.isSubscribed === true ||
+          user.subscriptionActive === true
+        )
+      );
+
+    console.log('[admin:updateOrderStatus] orderId=', order._id, 'prevStatus=', previousStatus, 'newStatus=', status, 'alreadyCredited=', alreadyCredited, 'userId=', user?._id, 'subActive=', userHasActiveSubscription);
+
     if (
       status === 'delivered' &&
-      order.user &&
-      order.user.subscription &&
-      order.user.subscription.isActive
+      previousStatus !== 'delivered' &&
+      user &&
+      userHasActiveSubscription &&
+      !alreadyCredited
     ) {
-      let totalDiscount = 0;
-      for (const item of order.items) {
-        totalDiscount += item.discount || 0;
+      let totalCredit = 0;
+
+      for (const item of order.items || []) {
+        const qty = Number(item.quantity || 1);
+        let credited = 0;
+
+        // Prefer explicit credited value stored on item
+        if (typeof item.subscriptionDiscountCredited === 'number') {
+          credited = item.subscriptionDiscountCredited;
+        }
+        // If there's a per-item discount value (stored as discount per unit or total)
+        else if (typeof item.discount === 'number') {
+          credited = item.discount * qty;
+        }
+        // Fallback: compute using stored price and subscriptionDiscountPercentage
+        else if (typeof item.subscriptionDiscountPercentage === 'number' && typeof item.price === 'number') {
+          credited = ((item.price * item.subscriptionDiscountPercentage) / 100) * qty;
+        }
+
+        // safety: ensure number
+        credited = Number(credited || 0);
+        totalCredit += credited;
       }
-      order.user.accountBalance = (order.user.accountBalance || 0) + totalDiscount;
-      await order.user.save();
+
+      totalCredit = Math.round(totalCredit * 100) / 100;
+      console.log('[admin:updateOrderStatus] totalCreditCalculated=', totalCredit);
+
+      if (totalCredit > 0) {
+        user.accountBalance = (Number(user.accountBalance) || 0) + totalCredit;
+        await user.save();
+
+        // mark order as credited to avoid double crediting later
+        order.walletCredit = order.walletCredit || {};
+        order.walletCredit.amountCredited = (order.walletCredit.amountCredited || 0) + totalCredit;
+        order.walletCredit.credited = true;
+        order.walletCredit.creditedAt = new Date();
+      } else {
+        console.log('[admin:updateOrderStatus] totalCredit is 0, nothing credited');
+      }
+    } else {
+      console.log('[admin:updateOrderStatus] Credit conditions not met, skipping credit');
     }
 
     await order.save();
@@ -474,6 +530,9 @@ exports.updateOrderStatus = async (req, res) => {
     });
   }
 };
+// ...existing code...
+// ...existing code...
+
 /**
  * @desc    Get sales report (admin)
  * @route   GET /api/admin/reports/sales

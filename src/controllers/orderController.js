@@ -16,6 +16,244 @@ function getSubscriptionDiscountPct(product) {
 }
 
 // Create order (full price charged; store walletCredit amount)
+// exports.createOrder = async (req, res) => {
+//   try {
+//     const userId = req.user.id;
+//     const {
+//       items,
+//       shipping = 0,
+//       payment,
+//       billingAddress,
+//       shippingAddress,
+//       orderNumber,
+//       status = 'pending',
+//       phoneNumber
+//     } = req.body;
+
+//     if (!Array.isArray(items) || items.length === 0) {
+//       return res.status(400).json({ success: false, message: 'No items provided' });
+//     }
+
+//     // Validate required fields
+//     if (!shippingAddress || typeof shippingAddress !== 'string') {
+//       return res.status(400).json({ success: false, message: 'shippingAddress is required and must be a string' });
+//     }
+//     if (!billingAddress || typeof billingAddress.address !== 'string') {
+//       return res.status(400).json({ success: false, message: 'billingAddress.address is required' });
+//     }
+//     if (!orderNumber) {
+//       return res.status(400).json({ success: false, message: 'orderNumber is required' });
+//     }
+//     if (!phoneNumber) {
+//       return res.status(400).json({ success: false, message: 'phoneNumber is required' });
+//     }
+//     if (!payment || typeof payment.method !== 'string') {
+//       return res.status(400).json({ success: false, message: 'payment.method is required' });
+//     }
+
+//     const user = await User.findById(userId).select('subscription referral.totalEarnings');
+//     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+//     // Build items at full price and compute wallet credit (if user is subscribed)
+//     const now = new Date();
+//     const isSubscribed = user.subscription?.isActive && (!user.subscription.expiryDate || user.subscription.expiryDate > now);
+
+//     let orderItems = [];
+//     let subtotal = 0;
+//     let walletCreditTotal = 0;
+
+//     for (const line of items) {
+//       const product = await Product.findById(line.productId).select('name price discount');
+//       if (!product) {
+//         return res.status(400).json({ success: false, message: `Product not found: ${line.productId}` });
+//       }
+//       const qty = Math.max(1, Number(line.quantity || 1));
+//       const unitPrice = Number(product.price || 0); // full price
+//       const lineTotal = unitPrice * qty;
+
+//       let subPct = 0;
+//       let credited = 0;
+
+//       if (isSubscribed) {
+//         subPct = getSubscriptionDiscountPct(product); // 0..100
+//         if (subPct > 0) {
+//           const perUnitDiscount = (unitPrice * subPct) / 100;
+//           credited = Math.round(perUnitDiscount * qty * 100) / 100; // round 2 decimals
+//           walletCreditTotal += credited;
+//         }
+//       }
+
+//       orderItems.push({
+//         product: product._id,
+//         name: product.name,
+//         price: unitPrice,                        // full price
+//         quantity: qty,
+//         subscriptionDiscountPercentage: subPct,  // audit only
+//         subscriptionDiscountCredited: credited   // audit only
+//       });
+//       subtotal += lineTotal;
+//     }
+
+//     const total = subtotal + Number(shipping || 0);
+
+//     // Only allow valid statuses
+//     const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
+//     const orderStatus = validStatuses.includes(status) ? status : 'pending';
+
+//     const order = await Order.create({
+//       user: userId,
+//       items: orderItems,
+//       orderNumber,
+//       shippingAddress,
+//       billingAddress,
+//       payment,
+//       subtotal,
+//       shipping,
+//       total,
+//       status: orderStatus,
+//       phoneNumber,
+//       walletCredit: {
+//         amount: walletCreditTotal,
+//         credited: false
+//       }
+//     });
+
+//     return res.status(201).json({
+//       success: true,
+//       message: 'Order created',
+//       order
+//     });
+//   } catch (error) {
+//     console.error('createOrder error:', error);
+//     return res.status(500).json({ success: false, message: 'Failed to create order', error: error.message });
+//   }
+// };
+// ...existing code...
+// exports.createOrder = async (req, res) => {
+//   try {
+//     // require authenticated user (or adapt if you want guest orders)
+//     if (!req.user || !req.user.id) {
+//       return res.status(401).json({ success: false, message: 'Authentication required to place order' });
+//     }
+//     const userId = req.user.id;
+
+//     const {
+//       items,
+//       shipping = 0,
+//       payment,
+//       billingAddress,
+//       shippingAddress,
+//       orderNumber: providedOrderNumber,
+//       status,
+//       phoneNumber
+//     } = req.body;
+
+//     if (!Array.isArray(items) || items.length === 0) {
+//       return res.status(400).json({ success: false, message: 'No items provided' });
+//     }
+
+//     // Validate required fields from frontend
+//     if (!shippingAddress || typeof shippingAddress !== 'string') {
+//       return res.status(400).json({ success: false, message: 'shippingAddress is required and must be a string' });
+//     }
+//     if (!billingAddress || typeof billingAddress.address !== 'string') {
+//       return res.status(400).json({ success: false, message: 'billingAddress.address is required' });
+//     }
+//     if (!phoneNumber) {
+//       return res.status(400).json({ success: false, message: 'phoneNumber is required' });
+//     }
+//     if (!payment || typeof payment.method !== 'string') {
+//       return res.status(400).json({ success: false, message: 'payment.method is required' });
+//     }
+
+//     // generate orderNumber server-side if not provided
+//     const genOrderNumber = () => {
+//       const now = Date.now();
+//       const rnd = Math.floor(Math.random() * 9000) + 1000;
+//       return `ORD-${now}-${rnd}`;
+//     };
+//     const orderNum = providedOrderNumber && typeof providedOrderNumber === 'string'
+//       ? providedOrderNumber
+//       : genOrderNumber();
+
+//     // ensure valid status (use default 'pending' if invalid/not provided)
+//     const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
+//     const orderStatus = validStatuses.includes(status) ? status : 'pending';
+
+//     const user = await User.findById(userId).select('subscription referral.totalEarnings');
+//     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+//     // Build items at full price and compute wallet credit (if user is subscribed)
+//     const now = new Date();
+//     const isSubscribed = user.subscription?.isActive && (!user.subscription.expiryDate || user.subscription.expiryDate > now);
+
+//     let orderItems = [];
+//     let subtotal = 0;
+//     let walletCreditTotal = 0;
+
+//     for (const line of items) {
+//       const product = await Product.findById(line.productId).select('name price discount');
+//       if (!product) {
+//         return res.status(400).json({ success: false, message: `Product not found: ${line.productId}` });
+//       }
+//       const qty = Math.max(1, Number(line.quantity || 1));
+//       const unitPrice = Number(product.price || 0); // full price
+//       const lineTotal = unitPrice * qty;
+
+//       let subPct = 0;
+//       let credited = 0;
+
+//       if (isSubscribed) {
+//         subPct = getSubscriptionDiscountPct(product); // 0..100
+//         if (subPct > 0) {
+//           const perUnitDiscount = (unitPrice * subPct) / 100;
+//           credited = Math.round(perUnitDiscount * qty * 100) / 100; // round 2 decimals
+//           walletCreditTotal += credited;
+//         }
+//       }
+
+//       orderItems.push({
+//         product: product._id,
+//         name: product.name,
+//         price: unitPrice,
+//         quantity: qty,
+//         subscriptionDiscountPercentage: subPct,
+//         subscriptionDiscountCredited: credited
+//       });
+//       subtotal += lineTotal;
+//     }
+
+//     const total = subtotal + Number(shipping || 0);
+
+//     const order = await Order.create({
+//       user: userId,
+//       items: orderItems,
+//       orderNumber: orderNum,
+//       shippingAddress,
+//       billingAddress,
+//       payment,
+//       subtotal,
+//       shipping,
+//       total,
+//       status: orderStatus,
+//       phoneNumber,
+//       walletCredit: {
+//         amount: walletCreditTotal,
+//         credited: false
+//       }
+//     });
+
+//     return res.status(201).json({
+//       success: true,
+//       message: 'Order created',
+//       order
+//     });
+//   } catch (error) {
+//     console.error('createOrder error:', error);
+//     return res.status(500).json({ success: false, message: 'Failed to create order', error: error.message });
+//   }
+// };
+
 exports.createOrder = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -27,14 +265,16 @@ exports.createOrder = async (req, res) => {
       shippingAddress,
       orderNumber,
       status = 'pending',
-      phoneNumber
+      phoneNumber,
+      subtotal,
+      tax = 0,
+      total
     } = req.body;
 
+    // Validate required fields
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'No items provided' });
     }
-
-    // Validate required fields
     if (!shippingAddress || typeof shippingAddress !== 'string') {
       return res.status(400).json({ success: false, message: 'shippingAddress is required and must be a string' });
     }
@@ -50,51 +290,37 @@ exports.createOrder = async (req, res) => {
     if (!payment || typeof payment.method !== 'string') {
       return res.status(400).json({ success: false, message: 'payment.method is required' });
     }
+    if (typeof subtotal !== 'number' || typeof total !== 'number') {
+      return res.status(400).json({ success: false, message: 'subtotal and total must be numbers' });
+    }
 
     const user = await User.findById(userId).select('subscription referral.totalEarnings');
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    // Build items at full price and compute wallet credit (if user is subscribed)
+    // Accept items as sent from frontend (no backend price calculation)
+    let orderItems = [];
+    let walletCreditTotal = 0;
     const now = new Date();
     const isSubscribed = user.subscription?.isActive && (!user.subscription.expiryDate || user.subscription.expiryDate > now);
 
-    let orderItems = [];
-    let subtotal = 0;
-    let walletCreditTotal = 0;
-
     for (const line of items) {
-      const product = await Product.findById(line.productId).select('name price discount');
-      if (!product) {
-        return res.status(400).json({ success: false, message: `Product not found: ${line.productId}` });
-      }
-      const qty = Math.max(1, Number(line.quantity || 1));
-      const unitPrice = Number(product.price || 0); // full price
-      const lineTotal = unitPrice * qty;
-
+      // Optionally, you can fetch product and validate price here if you want
       let subPct = 0;
       let credited = 0;
-
-      if (isSubscribed) {
-        subPct = getSubscriptionDiscountPct(product); // 0..100
-        if (subPct > 0) {
-          const perUnitDiscount = (unitPrice * subPct) / 100;
-          credited = Math.round(perUnitDiscount * qty * 100) / 100; // round 2 decimals
-          walletCreditTotal += credited;
-        }
+      if (isSubscribed && line.subscriptionDiscountPercentage && line.subscriptionDiscountCredited) {
+        subPct = line.subscriptionDiscountPercentage;
+        credited = line.subscriptionDiscountCredited;
+        walletCreditTotal += credited;
       }
-
       orderItems.push({
-        product: product._id,
-        name: product.name,
-        price: unitPrice,                        // full price
-        quantity: qty,
-        subscriptionDiscountPercentage: subPct,  // audit only
-        subscriptionDiscountCredited: credited   // audit only
+        product: line.productId,
+        name: line.name,
+        price: line.price,
+        quantity: line.quantity,
+        subscriptionDiscountPercentage: subPct,
+        subscriptionDiscountCredited: credited
       });
-      subtotal += lineTotal;
     }
-
-    const total = subtotal + Number(shipping || 0);
 
     // Only allow valid statuses
     const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
@@ -109,6 +335,7 @@ exports.createOrder = async (req, res) => {
       payment,
       subtotal,
       shipping,
+      tax,
       total,
       status: orderStatus,
       phoneNumber,
