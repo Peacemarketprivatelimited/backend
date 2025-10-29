@@ -42,10 +42,10 @@ router.get('/orders/:id', hasPermission('manageOrders'), adminController.getOrde
 router.put('/orders/:id/status', hasPermission('manageOrders'), adminController.updateOrderStatus);
 
 // Credit wallet for an order (admin approves post-delivery)
-router.post('/orders/:orderId/credit-wallet', hasPermission('manageOrders'), async (req, res) => {
-  // delegate to orderController's credit endpoint
-  return orderController.creditWalletForOrder(req, res);
-});
+// router.post('/orders/:orderId/credit-wallet' async (req, res) => {
+//   // delegate to orderController's credit endpoint
+//   return orderController.creditWalletForOrder(req, res);
+// });
 
 // Subscription management
 // router.get('/subscriptions', hasPermission('manageSubscriptions'), adminController.getAllSubscriptions);
@@ -73,10 +73,12 @@ router.put('/blogs/:id', hasPermission('manageProducts'), upload.single('feature
 router.delete('/blogs/:id', hasPermission('manageProducts'), blogController.deleteBlog);
 
 // Deliver and credit wallet for an order
+// Correct way (assuming you have orderController.creditWalletForOrder)
 router.post(
-  '/orders/:orderId/deliver-and-credit',
+  '/orders/:orderId/credit-wallet',
   hasPermission('manageOrders'),
-  orderController.deliverAndCreditWallet
+  orderController.creditWalletForOrder
 );
+
 
 module.exports = router;

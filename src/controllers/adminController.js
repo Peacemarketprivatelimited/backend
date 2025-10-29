@@ -411,7 +411,8 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    const order = await Order.findById(req.params.id);
+    // Populate user for wallet logic
+    const order = await Order.findById(req.params.id).populate('user');
 
     if (!order) {
       return res.status(404).json({
@@ -420,33 +421,17 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Update order
+    // Update order fields
     order.status = status;
-
-    if (trackingNumber) {
-      order.trackingNumber = trackingNumber;
-    }
-
-    if (trackingUrl) {
-      order.trackingUrl = trackingUrl;
-    }
-
-    if (notes) {
-      order.notes = notes;
-    }
+    if (trackingNumber) order.trackingNumber = trackingNumber;
+    if (trackingUrl) order.trackingUrl = trackingUrl;
+    if (notes) order.notes = notes;
 
     // Set status-specific dates
-    if (status === 'shipped' && !order.shippedAt) {
-      order.shippedAt = Date.now();
-    }
-
-    if (status === 'delivered' && !order.deliveredAt) {
-      order.deliveredAt = Date.now();
-    }
-
+    if (status === 'shipped' && !order.shippedAt) order.shippedAt = Date.now();
+    if (status === 'delivered' && !order.deliveredAt) order.deliveredAt = Date.now();
     if (status === 'cancelled' && !order.cancelledAt) {
       order.cancelledAt = Date.now();
-
       // Return items to inventory
       for (const item of order.items) {
         const product = await Product.findById(item.product._id);
@@ -456,9 +441,21 @@ exports.updateOrderStatus = async (req, res) => {
         }
       }
     }
+    if (status === 'refunded' && !order.refundedAt) order.refundedAt = Date.now();
 
-    if (status === 'refunded' && !order.refundedAt) {
-      order.refundedAt = Date.now();
+    // 💡 Wallet credit logic on delivery
+    if (
+      status === 'delivered' &&
+      order.user &&
+      order.user.subscription &&
+      order.user.subscription.isActive
+    ) {
+      let totalDiscount = 0;
+      for (const item of order.items) {
+        totalDiscount += item.discount || 0;
+      }
+      order.user.accountBalance = (order.user.accountBalance || 0) + totalDiscount;
+      await order.user.save();
     }
 
     await order.save();
@@ -477,7 +474,6 @@ exports.updateOrderStatus = async (req, res) => {
     });
   }
 };
-
 /**
  * @desc    Get sales report (admin)
  * @route   GET /api/admin/reports/sales
