@@ -22,73 +22,47 @@ exports.createOrder = async (req, res) => {
     const {
       items,
       shipping = 0,
+      tax = 0,
       payment,
       billingAddress,
       shippingAddress,
-      orderNumber,
       status = 'pending',
-      phoneNumber,
-      subtotal,
-      tax = 0,
-      total
+      phoneNumber
     } = req.body;
 
-    // Validate required fields
+    // Validate required fields (add more as needed)
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'No items provided' });
     }
-    if (!shippingAddress || typeof shippingAddress !== 'string') {
-      return res.status(400).json({ success: false, message: 'shippingAddress is required and must be a string' });
-    }
-    if (!billingAddress || typeof billingAddress.address !== 'string') {
-      return res.status(400).json({ success: false, message: 'billingAddress.address is required' });
-    }
-    if (!orderNumber) {
-      return res.status(400).json({ success: false, message: 'orderNumber is required' });
-    }
-    if (!phoneNumber) {
-      return res.status(400).json({ success: false, message: 'phoneNumber is required' });
-    }
-    if (!payment || typeof payment.method !== 'string') {
-      return res.status(400).json({ success: false, message: 'payment.method is required' });
-    }
-    if (typeof subtotal !== 'number' || typeof total !== 'number') {
-      return res.status(400).json({ success: false, message: 'subtotal and total must be numbers' });
-    }
 
-    const user = await User.findById(userId).select('subscription referral.totalEarnings');
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-    // Accept items as sent from frontend (no backend price calculation)
     let orderItems = [];
+    let subtotal = 0;
     let walletCreditTotal = 0;
-    const now = new Date();
-    const isSubscribed = user.subscription?.isActive && (!user.subscription.expiryDate || user.subscription.expiryDate > now);
 
     for (const line of items) {
-      // Optionally, you can fetch product and validate price here if you want
-      let subPct = 0;
-      let credited = 0;
-      if (isSubscribed && line.subscriptionDiscountPercentage && line.subscriptionDiscountCredited) {
-        subPct = line.subscriptionDiscountPercentage;
-        credited = line.subscriptionDiscountCredited;
-        walletCreditTotal += credited;
-      }
+      // Frontend must send: actualPrice, discountedPrice, quantity, productId, name
+      const actualPrice = Number(line.actualPrice);
+      const discountedPrice = Number(line.discountedPrice);
+      const discount = actualPrice - discountedPrice;
+      const qty = Number(line.quantity);
+
       orderItems.push({
         product: line.productId,
-        name: line.name,
-        price: line.price,
-        quantity: line.quantity,
-        subscriptionDiscountPercentage: subPct,
-        subscriptionDiscountCredited: credited
+        name: line.name || '',
+        actualPrice,
+        discountedPrice,
+        discount,
+        quantity: qty
       });
+
+      subtotal += discountedPrice * qty;
+      walletCreditTotal += discount * qty;
     }
 
-    // Only allow valid statuses
-    const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
-    const orderStatus = validStatuses.includes(status) ? status : 'pending';
+    const shippingNum = Number(shipping);
+    const taxNum = Number(tax);
+    const total = subtotal + shippingNum + taxNum;
 
-    // Always generate orderNumber in backend
     const finalOrderNumber = generateOrderNumber();
 
     const order = await Order.create({
@@ -99,10 +73,10 @@ exports.createOrder = async (req, res) => {
       billingAddress,
       payment,
       subtotal,
-      shipping,
-      tax,
+      shipping: shippingNum,
+      tax: taxNum,
       total,
-      status: orderStatus,
+      status,
       phoneNumber,
       walletCredit: {
         amount: walletCreditTotal,
@@ -500,26 +474,21 @@ exports.deliverAndCreditWallet = async (req, res) => {
     let creditedAmount = 0;
 
     await session.withTransaction(async () => {
-      // 1. Find order
       const order = await Order.findById(orderId).session(session);
       if (!order) throw new Error('Order not found');
 
-      // 2. Update status to delivered if not already
       if (order.status !== 'delivered') {
         order.status = 'delivered';
         order.deliveredAt = new Date();
         await order.save({ session });
       }
 
-      // 3. Find user and check subscription
-      const user = await User.findById(order.user).session(session).select('subscription referral.totalEarnings');
+      const userId = order.user._id || order.user;
+      const user = await User.findById(userId).session(session).select('subscription referral.totalEarnings');
       if (!user) throw new Error('User not found for order');
 
-      const now = new Date();
-      const isSubscribed = user.subscription?.isActive && (!user.subscription.expiryDate || user.subscription.expiryDate > now);
-
-      // 4. Only credit wallet if subscribed and not already credited
-      if (isSubscribed && order.walletCredit && !order.walletCredit.credited) {
+      // Credit wallet only if not already credited
+      if (order.walletCredit && !order.walletCredit.credited) {
         const amount = Number(order.walletCredit.amount || 0);
         creditedAmount = amount;
 
@@ -547,7 +516,7 @@ exports.deliverAndCreditWallet = async (req, res) => {
       success: true,
       message: updatedOrder.walletCredit.credited
         ? 'Order delivered and wallet credited'
-        : 'Order delivered (no wallet credit: user not subscribed or already credited)',
+        : 'Order delivered (no wallet credit: already credited)',
       orderId,
       status: updatedOrder.status,
       deliveredAt: updatedOrder.deliveredAt,

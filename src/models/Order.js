@@ -4,12 +4,11 @@ const Schema = mongoose.Schema;
 const OrderItemSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   name: String,
-  price: { type: Number, required: true },         // full unit price charged
-  quantity: { type: Number, required: true },
+  actualPrice: { type: Number, required: true },      // original price (no discount)
+  discountedPrice: { type: Number, required: true },  // price after discount
+  discount: { type: Number, required: true },         // actualPrice - discountedPrice
+  quantity: { type: Number, required: true }
 
-  // subscription discount audit (credited to wallet, not subtracted from price)
-  subscriptionDiscountPercentage: { type: Number, default: 0 },
-  subscriptionDiscountCredited: { type: Number, default: 0 } // per line credited amount
 }, { _id: false });
 
 const OrderSchema = new mongoose.Schema({
