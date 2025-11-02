@@ -1,15 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const orderController = require('../controllers/orderController');
 const { protect } = require('../middlewares/authMiddleware');
-const { hasPermission } = require('../middlewares/adminMiddleware');
-const adminController = require('../controllers/adminController');
+const { isAdmin, hasPermission } = require('../middlewares/adminMiddleware');
+const orderController = require('../controllers/orderController');
+const adminController = require('../controllers/adminController'); // FIX: import
 
-router.post('/',protect, orderController.createOrder);
 // All order routes require authentication
 router.use(protect);
-router.get('/orders', hasPermission('manageOrders'), adminController.getAllOrders);
 
+// Create order (user)
+router.post('/', orderController.createOrder);
+
+// Admin order routes (note: path becomes /api/orders/orders)
+router.get('/orders', isAdmin, hasPermission('manageOrders'), adminController.getAllOrders);
+router.get('/orders/:id', isAdmin, hasPermission('manageOrders'), adminController.getOrderById);
+
+// Single status route (remove duplicate)
+router.put('/orders/:id/status', isAdmin, hasPermission('manageOrders'), orderController.adminUpdateOrderStatus);
 
 // User order routes
 router.get('/', orderController.getUserOrders);
@@ -17,16 +24,7 @@ router.get('/:id', orderController.getOrderById);
 router.put('/:id/cancel', orderController.cancelOrder);
 router.get('/:id/track', orderController.trackOrder);
 
-// Orders management (uncomment these)
-router.get('/orders/:id', hasPermission('manageOrders'), adminController.getOrderById);
-router.put('/orders/:id/status', hasPermission('manageOrders'), adminController.updateOrderStatus);
-router.put('/orders/:id/status', hasPermission('manageOrders'), orderController.adminUpdateOrderStatus);
-
-
-// Reports (uncomment this)
-router.get('/reports/sales', hasPermission('viewReports'), adminController.getSalesReport);
-
-
-router.get('/:id/status', orderController.getOrderStatus);
+// Credit wallet for an order (admin/system)
+router.post('/:orderId/credit-wallet', isAdmin, hasPermission('manageOrders'), orderController.creditWalletForOrder);
 
 module.exports = router;

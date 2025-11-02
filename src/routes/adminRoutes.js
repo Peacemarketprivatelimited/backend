@@ -3,6 +3,9 @@ const router = express.Router();
 const adminController = require('../controllers/adminController');
 const { protect } = require('../middlewares/authMiddleware');
 const { isAdmin, hasPermission } = require('../middlewares/adminMiddleware');
+const orderController = require('../controllers/orderController');
+const blogController = require('../controllers/blogController'); // add this
+const upload = require('../middlewares/uploadMiddleware'); // multipart/form-data handler (multer wrapper)
 
 // Apply authentication and admin check to all routes
 router.use(protect);
@@ -38,6 +41,12 @@ router.get('/orders', hasPermission('manageOrders'), adminController.getAllOrder
 router.get('/orders/:id', hasPermission('manageOrders'), adminController.getOrderById);
 router.put('/orders/:id/status', hasPermission('manageOrders'), adminController.updateOrderStatus);
 
+// Credit wallet for an order (admin approves post-delivery)
+router.post('/orders/:orderId/credit-wallet', hasPermission('manageOrders'), async (req, res) => {
+  // delegate to orderController's credit endpoint
+  return orderController.creditWalletForOrder(req, res);
+});
+
 // Subscription management
 // router.get('/subscriptions', hasPermission('manageSubscriptions'), adminController.getAllSubscriptions);
 // router.get('/subscriptions/:id', hasPermission('manageSubscriptions'), adminController.getSubscriptionById);
@@ -52,5 +61,22 @@ router.put('/withdrawals/reject', hasPermission('manageWithdrawals'), adminContr
 // router.get('/reports/users', hasPermission('viewReports'), adminController.getUsersReport);
 // router.get('/reports/referrals', hasPermission('viewReports'), adminController.getReferralsReport);
 // router.get('/reports/subscriptions', hasPermission('viewReports'), adminController.getSubscriptionsReport);
+
+// Blogs management (admin)
+// GET /api/admin/blogs
+router.get('/blogs', hasPermission('manageProducts'), blogController.getAllBlogsAdmin);
+// Create blog with optional featuredImage file (field name: featuredImage)
+router.post('/blogs', hasPermission('manageProducts'), upload.single('featuredImage'), blogController.createBlog);
+// Update blog with optional featuredImage file
+router.get('/blogs/:id', hasPermission('manageProducts'), blogController.getBlogByIdAdmin);
+router.put('/blogs/:id', hasPermission('manageProducts'), upload.single('featuredImage'), blogController.updateBlog);
+router.delete('/blogs/:id', hasPermission('manageProducts'), blogController.deleteBlog);
+
+// Deliver and credit wallet for an order
+router.post(
+  '/orders/:orderId/deliver-and-credit',
+  hasPermission('manageOrders'),
+  orderController.deliverAndCreditWallet
+);
 
 module.exports = router;
