@@ -388,77 +388,79 @@ exports.adminUpdateOrderStatus = async (req, res) => {
  * @access  Private (Admin)
  */
 exports.creditWalletForOrder = async (req, res) => {
-  const session = await mongoose.startSession();
   try {
     const { orderId } = req.params;
-    const adminTriggered = !!req.user?.role && (req.user.role === 'admin' || req.user.role === 'superadmin');
-
     let creditedAmount = 0;
 
-    await session.withTransaction(async () => {
-      const order = await Order.findById(orderId).session(session);
-      if (!order) throw new Error('Order not found');
+    const order = await Order.findById(orderId);
+    if (!order) throw new Error('Order not found');
 
-      // Idempotent: already credited
-      if (order.walletCredit && order.walletCredit.credited) {
-        creditedAmount = Number(order.walletCredit.amount || 0);
-        return;
-      }
+    // Idempotent: already credited
+    if (order.walletCredit && order.walletCredit.credited) {
+      creditedAmount = Number(order.walletCredit.amount || 0);
+      return res.status(200).json({
+        success: true,
+        message: 'Wallet already credited',
+        orderId,
+        amount: creditedAmount,
+        walletCredit: order.walletCredit
+      });
+    }
 
-      // Only allow crediting after delivery (admin approves post-delivery)
-      if (order.status !== 'delivered') {
-        throw new Error('Order must be delivered before wallet credit can be approved');
-      }
+    // Only allow crediting after delivery (admin approves post-delivery)
+    if (order.status !== 'delivered') {
+      throw new Error('Order must be delivered before wallet credit can be approved');
+    }
 
-      // Calculate amount
-      const amount = Number(order.walletCredit?.amount || 0);
-      creditedAmount = amount;
+    // Calculate amount
+    const amount = Number(order.walletCredit?.amount || 0);
+    creditedAmount = amount;
 
-      // If nothing to credit, still mark credited to avoid future attempts
-      if (amount <= 0) {
-        order.walletCredit = order.walletCredit || {};
-        order.walletCredit.credited = true;
-        order.walletCredit.creditedAt = new Date();
-        await order.save({ session });
-        return;
-      }
-
-      // Increment user's wallet (using referral.totalEarnings per spec)
-      const user = await User.findById(order.user).session(session).select('_id referral.totalEarnings');
-      if (!user) throw new Error('User not found for order');
-
-      await User.updateOne(
-        { _id: user._id },
-        {
-          $inc: {
-            'referral.totalEarnings': amount,
-            'referral.earningsByLevel.level1': amount // optional audit increment
-          }
-        },
-        { session }
-      );
-
-      // Mark order credited
+    // If nothing to credit, still mark credited to avoid future attempts
+    if (amount <= 0) {
       order.walletCredit = order.walletCredit || {};
       order.walletCredit.credited = true;
       order.walletCredit.creditedAt = new Date();
-      await order.save({ session });
-    });
+      await order.save();
+      return res.status(200).json({
+        success: true,
+        message: 'No wallet credit to apply',
+        orderId,
+        amount: 0,
+        walletCredit: order.walletCredit
+      });
+    }
 
-    const updated = await Order.findById(orderId).select('walletCredit');
+    // Increment user's wallet (using referral.totalEarnings per spec)
+    const user = await User.findById(order.user).select('_id referral.totalEarnings');
+    if (!user) throw new Error('User not found for order');
+
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $inc: {
+          'referral.totalEarnings': amount,
+          'referral.earningsByLevel.level1': amount // optional audit increment
+        }
+      }
+    );
+
+    // Mark order credited
+    order.walletCredit = order.walletCredit || {};
+    order.walletCredit.credited = true;
+    order.walletCredit.creditedAt = new Date();
+    await order.save();
 
     return res.status(200).json({
       success: true,
       message: 'Wallet credited',
       orderId,
       amount: creditedAmount,
-      walletCredit: updated.walletCredit
+      walletCredit: order.walletCredit
     });
   } catch (error) {
     console.error('creditWalletForOrder error:', error);
     return res.status(400).json({ success: false, message: error.message });
-  } finally {
-    session.endSession();
   }
 };
 
