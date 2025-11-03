@@ -288,52 +288,41 @@ exports.updateCategory = async (req, res) => {
  * @access  Admin
  */
 exports.deleteCategory = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  
   try {
     const { id } = req.params;
-    
+
     // Check if any products are using this category
     const productsUsingCategory = await Product.countDocuments({ 'category._id': id });
-    
+
     if (productsUsingCategory > 0) {
       return res.status(400).json({
         success: false,
         message: `Cannot delete category: ${productsUsingCategory} products are using this category`
       });
     }
-    
+
     // Find category
-    const category = await Category.findById(id).session(session);
+    const category = await Category.findById(id);
     if (!category) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(404).json({
         success: false,
         message: 'Category not found'
       });
     }
-    
+
     // Delete image from S3 if exists
     if (category.image && category.image.public_id) {
       await deleteFromS3(category.image.public_id);
     }
-    
+
     // Delete category
-    await Category.findByIdAndDelete(id).session(session);
-    
-    await session.commitTransaction();
-    session.endSession();
-    
+    await Category.findByIdAndDelete(id);
+
     res.json({
       success: true,
       message: 'Category deleted successfully'
     });
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-    
     console.error('Error deleting category:', error);
     res.status(500).json({
       success: false,
