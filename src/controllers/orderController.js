@@ -470,48 +470,44 @@ exports.creditWalletForOrder = async (req, res) => {
  * @access  Private (Admin)
  */
 exports.deliverAndCreditWallet = async (req, res) => {
-  const session = await mongoose.startSession();
   try {
     const { orderId } = req.params;
     let creditedAmount = 0;
 
-    await session.withTransaction(async () => {
-      const order = await Order.findById(orderId).session(session);
-      if (!order) throw new Error('Order not found');
+    const order = await Order.findById(orderId);
+    if (!order) throw new Error('Order not found');
 
-      if (order.status !== 'delivered') {
-        order.status = 'delivered';
-        order.deliveredAt = new Date();
-        await order.save({ session });
+    if (order.status !== 'delivered') {
+      order.status = 'delivered';
+      order.deliveredAt = new Date();
+      await order.save();
+    }
+
+    const userId = order.user._id || order.user;
+    const user = await User.findById(userId).select('subscription referral.totalEarnings');
+    if (!user) throw new Error('User not found for order');
+
+    // Credit wallet only if not already credited
+    if (order.walletCredit && !order.walletCredit.credited) {
+      const amount = Number(order.walletCredit.amount || 0);
+      creditedAmount = amount;
+
+      if (amount > 0) {
+        await User.updateOne(
+          { _id: user._id },
+          {
+            $inc: {
+              'referral.totalEarnings': amount,
+              'referral.earningsByLevel.level1': amount
+            }
+          }
+        );
       }
 
-      const userId = order.user._id || order.user;
-      const user = await User.findById(userId).session(session).select('subscription referral.totalEarnings');
-      if (!user) throw new Error('User not found for order');
-
-      // Credit wallet only if not already credited
-      if (order.walletCredit && !order.walletCredit.credited) {
-        const amount = Number(order.walletCredit.amount || 0);
-        creditedAmount = amount;
-
-        if (amount > 0) {
-          await User.updateOne(
-            { _id: user._id },
-            {
-              $inc: {
-                'referral.totalEarnings': amount,
-                'referral.earningsByLevel.level1': amount
-              }
-            },
-            { session }
-          );
-        }
-
-        order.walletCredit.credited = true;
-        order.walletCredit.creditedAt = new Date();
-        await order.save({ session });
-      }
-    });
+      order.walletCredit.credited = true;
+      order.walletCredit.creditedAt = new Date();
+      await order.save();
+    }
 
     const updatedOrder = await Order.findById(orderId).select('status walletCredit deliveredAt');
     return res.status(200).json({
@@ -528,8 +524,6 @@ exports.deliverAndCreditWallet = async (req, res) => {
   } catch (error) {
     console.error('deliverAndCreditWallet error:', error);
     return res.status(400).json({ success: false, message: error.message });
-  } finally {
-    session.endSession();
   }
 };
 
