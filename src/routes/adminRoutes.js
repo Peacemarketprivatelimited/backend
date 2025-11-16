@@ -6,6 +6,7 @@ const { isAdmin, hasPermission } = require('../middlewares/adminMiddleware');
 const orderController = require('../controllers/orderController');
 const blogController = require('../controllers/blogController'); // add this
 const upload = require('../middlewares/uploadMiddleware'); // multipart/form-data handler (multer wrapper)
+const videoController = require('../controllers/videoController');
 
 // Apply authentication and admin check to all routes
 router.use(protect);
@@ -71,6 +72,11 @@ router.post('/blogs', hasPermission('manageProducts'), upload.single('featuredIm
 router.get('/blogs/:id', hasPermission('manageProducts'), blogController.getBlogByIdAdmin);
 router.put('/blogs/:id', hasPermission('manageProducts'), upload.single('featuredImage'), blogController.updateBlog);
 router.delete('/blogs/:id', hasPermission('manageProducts'), blogController.deleteBlog);
+
+// Admin video management
+router.post('/videos', isAdmin, hasPermission('manageContent'), videoController.createVideo);
+router.get('/videos', isAdmin, hasPermission('manageContent'), videoController.adminListVideos);
+router.delete('/videos/:id', isAdmin, hasPermission('manageContent'), videoController.deleteVideo);
 
 // Deliver and credit wallet for an order
 router.post(

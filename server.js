@@ -71,6 +71,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/jazzcash', jazzcashRoutes);
 app.use('/api/blogs', blogRoutes);
+app.use('/api/videos', require('./src/routes/videoRoutes'));
 
 const adminLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
