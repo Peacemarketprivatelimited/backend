@@ -12,4 +12,6 @@ router.post('/:id/complete', protect, videoController.completeVideo);
 // user converts points to currency (protected)
 router.post('/convert', protect, videoController.convertPoints);
 
+router.get('/user-points', protect, videoController.getUserPoints);
+
 module.exports = router;

@@ -158,3 +158,22 @@ exports.convertPoints = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+exports.getUserPoints = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId).select('pointsBalance referral.totalEarnings');
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    return res.json({ 
+      success: true, 
+      pointsBalance: user.pointsBalance || 0,
+      totalEarnings: user.referral.totalEarnings || 0
+    });
+  } catch (err) {
+    console.error('getUserPoints error', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
