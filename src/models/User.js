@@ -91,6 +91,17 @@ const userSchema = new mongoose.Schema(
       }]
     },
 
+    // new: points balance and watched video history
+    pointsBalance: { type: Number, default: 0 },
+    watchedVideos: [
+      {
+        video: { type: mongoose.Schema.Types.ObjectId, ref: 'Video' },
+        points: { type: Number, default: 0 },
+        credited: { type: Boolean, default: false },
+        watchedAt: { type: Date }
+      }
+    ],
+
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
   },
