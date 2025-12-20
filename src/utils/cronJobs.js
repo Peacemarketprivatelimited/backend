@@ -94,6 +94,7 @@ const setupJazzCashStatusCheckCron = () => {
         }
     });
 
+    logger.info('✅ JazzCash transaction status check cron job scheduled');
     logger.info('JazzCash cron scheduled (cronJobs v2)');
 };
 
