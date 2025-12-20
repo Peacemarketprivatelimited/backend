@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const mongoose = require('mongoose');
 const PendingTransaction = require('../models/PendingTransaction');
 const { checkJazzCashTransactionStatus } = require('../controllers/jazzcashController');
+const logger = require('./logger');
 
 let lastMongoDisconnectedLogAt = 0;
 let lastMongoConnErrorLogAt = 0;
@@ -46,8 +47,8 @@ const setupJazzCashStatusCheckCron = () => {
             if (mongoose.connection.readyState !== 1) {
                 const nowMs = Date.now();
                 if (shouldLogMongoDisconnected(nowMs)) {
-                    console.error(
-                        `❌ Skipping JazzCash cron job: MongoDB not connected (readyState=${mongoose.connection.readyState})`
+                    logger.error(
+                        `Skipping JazzCash cron job: MongoDB not connected (readyState=${mongoose.connection.readyState})`
                     );
                 }
                 return;
@@ -61,15 +62,18 @@ const setupJazzCashStatusCheckCron = () => {
 
             if (pendingTransactions.length === 0) return;
 
-            console.log(`🔍 Found ${pendingTransactions.length} pending transaction(s) to check`);
+            logger.info(`JazzCash cron: found ${pendingTransactions.length} pending transaction(s) to check`);
 
             // Process each pending transaction
             for (const pendingTxn of pendingTransactions) {
                 try {
-                    console.log(`🔄 Checking transaction ${pendingTxn.pp_TxnRefNo}`);
+                    logger.info(`JazzCash cron: checking transaction ${pendingTxn.pp_TxnRefNo}`);
                     await checkJazzCashTransactionStatus(pendingTxn);
                 } catch (err) {
-                    console.error(`❌ Error checking transaction ${pendingTxn.pp_TxnRefNo}:`, err.message);
+                    logger.error(
+                        `JazzCash cron: error checking transaction ${pendingTxn.pp_TxnRefNo}`,
+                        { message: err?.message }
+                    );
 
                     // Update last checked time and reschedule for next check
                     pendingTxn.lastChecked = new Date();
@@ -81,16 +85,16 @@ const setupJazzCashStatusCheckCron = () => {
             const nowMs = Date.now();
             if (isMongoConnRefused(err)) {
                 if (shouldLogMongoConnError(nowMs)) {
-                    console.error('❌ Error in JazzCash cron job (MongoDB connection):', err.message);
+                    logger.error('JazzCash cron: MongoDB connection error', { message: err?.message });
                 }
                 return;
             }
 
-            console.error('❌ Error in JazzCash cron job:', err.message);
+            logger.error('JazzCash cron: unexpected error', { message: err?.message });
         }
     });
 
-    console.log('✅ JazzCash transaction status check cron job scheduled');
+    logger.info('JazzCash cron scheduled (cronJobs v2)');
 };
 
 module.exports = { setupJazzCashStatusCheckCron };
