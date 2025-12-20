@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const connectDB = require('./src/config/Db');
+const logger = require('./src/utils/logger');
 const adminRoutes = require('./src/routes/adminRoutes');
 const productRoutes = require('./src/routes/productRoutes');
 const categoryRoutes = require('./src/routes/categoryRoutes');
@@ -121,7 +122,7 @@ app.use((err, req, res, next) => {
 // Set port and start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running in ${environment} mode on port ${PORT}`);
+  logger.info(`Server running in ${environment} mode on port ${PORT}`);
 });
 
 // Handle unhandled promise rejections
