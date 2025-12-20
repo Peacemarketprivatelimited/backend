@@ -250,7 +250,7 @@ productSchema.index({ 'category._id': 1, 'status.active': 1 });
 productSchema.index({ 'status.featured': 1, 'status.active': 1 });
 productSchema.index({ 'discount.regular.active': 1, 'status.active': 1 });
 productSchema.index({ 'status.inStock': 1, 'status.active': 1 });
-// Note: slug index is already defined in schema with `index: true`
+// Note: slug is unique, which creates an index automatically
 productSchema.index({ price: 1 }); // For price filtering
 
 // STATICS
