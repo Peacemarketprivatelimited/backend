@@ -4,6 +4,7 @@ const PendingTransaction = require('../models/PendingTransaction');
 const { checkJazzCashTransactionStatus } = require('../controllers/jazzcashController');
 
 let lastMongoDisconnectedLogAt = 0;
+let lastMongoConnErrorLogAt = 0;
 
 function shouldLogMongoDisconnected(nowMs) {
     // Avoid flooding logs if Mongo is down; log at most once per 5 minutes.
@@ -13,6 +14,26 @@ function shouldLogMongoDisconnected(nowMs) {
         return true;
     }
     return false;
+}
+
+function shouldLogMongoConnError(nowMs) {
+    // Log at most once per 5 minutes for connection-level Mongo errors.
+    const fiveMinutesMs = 5 * 60 * 1000;
+    if (nowMs - lastMongoConnErrorLogAt >= fiveMinutesMs) {
+        lastMongoConnErrorLogAt = nowMs;
+        return true;
+    }
+    return false;
+}
+
+function isMongoConnRefused(err) {
+    const msg = err?.message || '';
+    return (
+        msg.includes('ECONNREFUSED') ||
+        msg.includes('MongoNetworkError') ||
+        msg.includes('Topology is closed') ||
+        msg.includes('Client must be connected')
+    );
 }
 
 // Setup cron job for checking pending transactions
@@ -57,6 +78,14 @@ const setupJazzCashStatusCheckCron = () => {
                 }
             }
         } catch (err) {
+            const nowMs = Date.now();
+            if (isMongoConnRefused(err)) {
+                if (shouldLogMongoConnError(nowMs)) {
+                    console.error('❌ Error in JazzCash cron job (MongoDB connection):', err.message);
+                }
+                return;
+            }
+
             console.error('❌ Error in JazzCash cron job:', err.message);
         }
     });
