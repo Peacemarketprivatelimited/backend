@@ -88,11 +88,16 @@ app.use('/api/subscription', subscriptionRoutes);
 
 // Run scheduled tasks
 const { checkExpiredSubscriptions } = require('./src/utils/scheduledTasks');
+const mongoose = require('mongoose');
 
 // Check for expired subscriptions daily
 setInterval(checkExpiredSubscriptions, 24 * 60 * 60 * 1000);
-// Initial check at startup
-setTimeout(checkExpiredSubscriptions, 5000);
+
+// Initial check only after MongoDB is connected
+mongoose.connection.once('connected', () => {
+  // Small delay to ensure everything is ready
+  setTimeout(checkExpiredSubscriptions, 2000);
+});
 
 // Root route
 app.get('/test', (req, res) => {

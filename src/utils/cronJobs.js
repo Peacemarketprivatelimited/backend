@@ -99,3 +99,37 @@ const setupJazzCashStatusCheckCron = () => {
 };
 
 module.exports = { setupJazzCashStatusCheckCron };
+
+// Optional: set up nightly aggregates for challenge events
+const setupChallengeAggregateCron = () => {
+    const ChallengeEvent = require('../models/ChallengeEvent');
+    const cron = require('node-cron');
+    const mongoose = require('mongoose');
+    const logger = require('./logger');
+
+    // run once daily at 00:05
+    cron.schedule('5 0 * * *', async () => {
+        try {
+            if (mongoose.connection.readyState !== 1) return;
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            yesterday.setHours(0, 0, 0, 0);
+            const today = new Date(yesterday);
+            today.setDate(yesterday.getDate() + 1);
+
+            const agg = await ChallengeEvent.aggregate([
+                { $match: { createdAt: { $gte: yesterday, $lt: today } } },
+                { $group: { _id: '$day', claims: { $sum: 1 }, points: { $sum: '$points' } } }
+            ]);
+
+            logger.info('Challenge aggregate (yesterday)', { date: yesterday.toISOString(), data: agg });
+            // Optionally persist to a collection for dashboards
+        } catch (err) {
+            logger.error('Challenge aggregate cron error', { message: err?.message });
+        }
+    });
+
+    logger.info('✅ Challenge aggregate cron scheduled (daily at 00:05)');
+};
+
+module.exports = { setupJazzCashStatusCheckCron, setupChallengeAggregateCron };

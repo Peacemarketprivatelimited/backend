@@ -150,7 +150,15 @@ async function generateReferralCode(userId) {
  */
 async function handleSubscriptionExpiry(userId) {
   try {
-    // Implement if you want to clear/rotate codes after expiry.
+    if (!userId) return;
+
+    // Mark the user's subscription as inactive when expired
+    await User.updateOne(
+      { _id: userId },
+      { $set: { 'subscription.isActive': false } }
+    );
+
+    // Optionally, additional cleanup (e.g. rotate referral code) can be done here
     return;
   } catch (error) {
     console.error('handleSubscriptionExpiry error:', error);

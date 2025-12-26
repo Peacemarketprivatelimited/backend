@@ -101,6 +101,15 @@ const userSchema = new mongoose.Schema(
         watchedAt: { type: Date }
       }
     ],
+    // 7-Day Challenge tracking
+    challenge: {
+      currentDay: { type: Number, default: 1, min: 1, max: 7 },
+      lastClaimedAt: { type: Date, default: null },
+      isActive: { type: Boolean, default: false }, // enabled for subscribed users
+      completedDays: [{ type: Date }], // timestamps of successful daily claims
+      totalChallengePoints: { type: Number, default: 0 }
+    },
+    
 
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }

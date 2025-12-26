@@ -707,3 +707,90 @@ exports.rejectWithdrawal = async (req, res) => {
     });
   }
 };
+
+// Analytics: count of subscribed users
+exports.subscriptionsCount = async (req, res) => {
+  try {
+    const now = new Date();
+    const count = await User.countDocuments({ 'subscription.isActive': true, 'subscription.expiryDate': { $gt: now } });
+    res.json({ success: true, subscribedUsers: count });
+  } catch (error) {
+    console.error('Error getting subscriptions count:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Analytics: challenge summary
+exports.challengeSummary = async (req, res) => {
+  try {
+    const ChallengeEvent = require('../models/ChallengeEvent');
+    const now = new Date();
+
+    // total points awarded from events
+    const totalPointsAgg = await ChallengeEvent.aggregate([
+      { $group: { _id: null, totalPoints: { $sum: '$points' }, totalClaims: { $sum: 1 } } }
+    ]);
+
+    // distribution of users by their currentDay
+    const byDay = await User.aggregate([
+      { $group: { _id: '$challenge.currentDay', users: { $sum: 1 }, avgPoints: { $avg: '$challenge.totalChallengePoints' } } },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // daily claim counts (last 7 days)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const dailyClaims = await ChallengeEvent.aggregate([
+      { $match: { createdAt: { $gte: sevenDaysAgo } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, claims: { $sum: 1 }, points: { $sum: '$points' } } },
+      { $sort: { _id: 1 } }
+    ]);
+
+    res.json({
+      success: true,
+      totalPointsAwarded: totalPointsAgg[0] ? totalPointsAgg[0].totalPoints : 0,
+      totalClaims: totalPointsAgg[0] ? totalPointsAgg[0].totalClaims : 0,
+      byDay,
+      dailyClaims
+    });
+  } catch (error) {
+    console.error('Error getting challenge summary:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Tasks analytics summary
+exports.tasksSummary = async (req, res) => {
+  try {
+    const Task = require('../models/Task');
+    const TaskSubmission = require('../models/TaskSubmission');
+    const now = new Date();
+
+    const totalTasks = await Task.countDocuments();
+    const activeTasks = await Task.countDocuments({ isActive: true, $or: [{ expiryDate: { $exists: false } }, { expiryDate: { $gt: now } }] });
+
+    const totalSubmissionsAgg = await TaskSubmission.aggregate([
+      { $group: { _id: null, totalSubmissions: { $sum: 1 }, totalPoints: { $sum: '$pointsAwarded' } } }
+    ]);
+
+    const topTasks = await TaskSubmission.aggregate([
+      { $group: { _id: '$task', completions: { $sum: 1 }, points: { $sum: '$pointsAwarded' } } },
+      { $sort: { completions: -1 } },
+      { $limit: 10 },
+      { $lookup: { from: 'tasks', localField: '_id', foreignField: '_id', as: 'task' } },
+      { $unwind: '$task' },
+      { $project: { task: 1, completions: 1, points: 1 } }
+    ]);
+
+    res.json({
+      success: true,
+      totalTasks,
+      activeTasks,
+      totalSubmissions: (totalSubmissionsAgg[0] && totalSubmissionsAgg[0].totalSubmissions) || 0,
+      totalPointsAwarded: (totalSubmissionsAgg[0] && totalSubmissionsAgg[0].totalPoints) || 0,
+      topTasks
+    });
+  } catch (error) {
+    console.error('Error getting tasks summary:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
