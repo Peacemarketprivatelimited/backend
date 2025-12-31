@@ -77,7 +77,7 @@ exports.listTasksForUser = async (req, res) => {
       updatedAt: t.updatedAt                    // ← ADD THIS
     }));
 
-    console.log('dataget', payload);
+    // console.log('dataget', payload);
 
     return res.json({ success: true, tasks: payload });
   
@@ -89,40 +89,56 @@ exports.listTasksForUser = async (req, res) => {
 
 // User: complete task (auto-complete, immediate points award)
 exports.completeTask = async (req, res) => {
-  const taskId = req.params.id;
-  const userId = req.user.id;
-  const now = new Date();
-
   try {
-    const user = await User.findById(userId).select('subscription');
-    if (!user || !user.subscription?.isActive || !user.subscription?.expiryDate || user.subscription.expiryDate <= now) {
+    const user = await User.findById(req.user.id).select('subscription pointsBalance');
+    
+    // Check subscription
+    const sub = user.subscription || {};
+    if (!sub.isActive || !sub.expiryDate || new Date(sub.expiryDate) <= new Date()) {
       return res.status(403).json({ success: false, message: 'Active subscription required' });
     }
 
-    const task = await Task.findById(taskId);
-    if (!task || !task.isActive) return res.status(404).json({ success: false, message: 'Task not found or inactive' });
-    if (task.expiryDate && task.expiryDate <= now) return res.status(400).json({ success: false, message: 'Task expired' });
-
-    // Use transaction to create submission and increment user points atomically
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    try {
-      await TaskSubmission.create([{ task: task._id, user: userId, pointsAwarded: task.points, completedAt: now }], { session });
-      const updatedUser = await User.findByIdAndUpdate(userId, { $inc: { pointsBalance: task.points } }, { new: true, session });
-      await session.commitTransaction();
-      session.endSession();
-
-      return res.json({ success: true, message: 'Task completed. Points awarded.', pointsAwarded: task.points, pointsBalance: updatedUser.pointsBalance });
-    } catch (err) {
-      await session.abortTransaction();
-      session.endSession();
-      if (err && err.code === 11000) {
-        return res.status(400).json({ success: false, message: 'Task already completed by user' });
-      }
-      throw err;
+    const task = await Task.findById(req.params.id);
+    if (!task || !task.isActive) {
+      return res.status(404).json({ success: false, message: 'Task not found or inactive' });
     }
+
+    // Check if already completed
+    const existing = await TaskSubmission.findOne({ user: req.user.id, task: task._id });
+    if (existing && !task.repeatable) {
+      return res.status(400).json({ success: false, message: 'Task already completed' });
+    }
+
+    // Check max completions
+    if (task.repeatable && existing) {
+      const count = await TaskSubmission.countDocuments({ user: req.user.id, task: task._id });
+      if (count >= task.maxPerUser) {
+        return res.status(400).json({ success: false, message: 'Max completions reached' });
+      }
+    }
+
+    // REMOVE TRANSACTION - Do direct updates instead
+    // Create submission
+    await TaskSubmission.create({
+      user: req.user.id,
+      task: task._id,
+      pointsAwarded: task.points,
+      completedAt: new Date()
+    });
+
+    // Update user points
+    await User.findByIdAndUpdate(req.user.id, {
+      $inc: { pointsBalance: task.points }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Task completed successfully',
+      pointsAwarded: task.points
+    });
+
   } catch (err) {
-    console.error('completeTask error', err);
+    console.error('completeTask error:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
