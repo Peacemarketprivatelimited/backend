@@ -33,10 +33,12 @@ app.use(helmet()); // Set security HTTP headers
 app.use(mongoSanitize()); // Sanitize inputs against NoSQL query injection
 app.use(xss()); // Sanitize inputs against XSS attacks
 
-// Rate limiting
+// Rate limiting (environment-aware)
+const isDevelopment = process.env.NODE_ENV === 'development';
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: isDevelopment ? 1000 : 100, // 1000 for dev, 100 for production
   message: 'Too many requests from this IP, please try again later'
 });
 app.use('/api', limiter);
@@ -47,7 +49,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // CORS middleware
 app.use(cors({
-  origin: ['https://admin.peace-market.com','https://peace-market.com'], // <-- set your frontend/admin domain here
+  origin: ['https://peace-market.com','https://admin.peace-market.com'], // <-- set your frontend/admin domain here
   credentials: true
 }));
 
@@ -76,11 +78,11 @@ app.use('/api/videos', require('./src/routes/videoRoutes'));
 
 const adminLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20, // limit each IP to 20 requests per window
-    message: 'Too many requests from this IP, please try again later'
+    max: isDevelopment ? 500 : 30, // 500 for dev, 30 for production
+    message: 'Too many admin requests from this IP, please try again later'
   });
   
-  app.use('/api/admin', adminLimiter,adminRoutes);
+  app.use('/api/admin', adminLimiter, adminRoutes);
 
 // Subscription routes
 const subscriptionRoutes = require('./src/routes/subscriptionRoutes');

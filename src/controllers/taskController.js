@@ -67,14 +67,20 @@ exports.listTasksForUser = async (req, res) => {
       platform: t.platform,
       actionUrl: t.actionUrl,
       points: t.points,
+      repeatable: t.repeatable || false,        // ← ADD THIS
+      maxPerUser: t.maxPerUser || 1,            // ← ADD THIS
       expiryDate: t.expiryDate,
       isActive: t.isActive,
       completed: !!doneMap.get(String(t._id)),
       completedAt: doneMap.get(String(t._id)) || null,
-      createdAt: t.createdAt
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt                    // ← ADD THIS
     }));
 
+    console.log('dataget', payload);
+
     return res.json({ success: true, tasks: payload });
+  
   } catch (err) {
     console.error('listTasksForUser error', err);
     return res.status(500).json({ success: false, message: err.message });
