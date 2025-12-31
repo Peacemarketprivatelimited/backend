@@ -78,11 +78,25 @@ router.post('/videos', isAdmin, hasPermission('manageContent'), videoController.
 router.get('/videos', isAdmin, hasPermission('manageContent'), videoController.adminListVideos);
 router.delete('/videos/:id', isAdmin, hasPermission('manageContent'), videoController.deleteVideo);
 
+// Task management (admin)
+const taskController = require('../controllers/taskController');
+router.post('/tasks', hasPermission('manageUsers'), taskController.createTask);
+router.put('/tasks/:id', hasPermission('manageUsers'), taskController.updateTask);
+router.delete('/tasks/:id', hasPermission('manageUsers'), taskController.deleteTask);
+router.get('/tasks', hasPermission('manageUsers'), taskController.adminListTasks);
+
+// Admin tasks analytics
+router.get('/analytics/tasks-summary', hasPermission('viewReports'), adminController.tasksSummary);
+
 // Deliver and credit wallet for an order
 router.post(
   '/orders/:orderId/deliver-and-credit',
   hasPermission('manageOrders'),
   orderController.deliverAndCreditWallet
 );
+
+// Analytics: subscriptions & challenge summary
+router.get('/analytics/subscriptions-count', hasPermission('viewReports'), adminController.subscriptionsCount);
+router.get('/analytics/challenge-summary', hasPermission('viewReports'), adminController.challengeSummary);
 
 module.exports = router;

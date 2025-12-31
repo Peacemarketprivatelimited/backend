@@ -61,3 +61,12 @@ yarn-error.log*
 
 # Optional: MongoDB data directory if running locally
 /data/db
+
+# Local test scripts (ignore to avoid committing local/temporary tests)
+/tests/
+test-results/
+*.test.log
+
+# Local helper scripts and Postman collection (ignore to avoid committing local tools)
+/scripts/
+/postman/
