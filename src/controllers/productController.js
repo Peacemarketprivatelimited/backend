@@ -2,6 +2,7 @@ const Product = require('../models/Product');
 const Category = require('../models/Category');
 const { uploadToS3, deleteFromS3 } = require('../utils/s3Utils');
 const mongoose = require('mongoose');
+const { Cache, TTL, CACHE_KEYS } = require('../config/redisConfig');
 
 /**
  * @desc    Get all products with filtering, sorting, and pagination
@@ -21,6 +22,19 @@ exports.getAllProducts = async (req, res) => {
       inStock,
       featured
     } = req.query;
+
+    // Generate cache key from query parameters
+    const cacheKey = Cache.generateKey(CACHE_KEYS.PRODUCTS + 'list:', {
+      page, limit, sort, order, category, minPrice, maxPrice, inStock, featured
+    });
+
+    // Try to get from cache first
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      // Add subscriber status to cached response
+      const isSubscriber = req.user && req.user.subscription && req.user.subscription.isActive;
+      return res.json({ ...cached, isSubscriber, fromCache: true });
+    }
 
     // Build filter object
     const filter = { 'status.active': true };
@@ -59,17 +73,22 @@ exports.getAllProducts = async (req, res) => {
     // Check if user has subscription to include subscription prices
     const isSubscriber = req.user && req.user.subscription && req.user.subscription.isActive;
 
-    res.json({
+    // Prepare response data
+    const responseData = {
       success: true,
       products,
-      isSubscriber,
       pagination: {
         total,
         page: Number(page),
         limit: Number(limit),
         pages: Math.ceil(total / Number(limit))
       }
-    });
+    };
+
+    // Cache the response (without user-specific data)
+    await Cache.set(cacheKey, responseData, TTL.MEDIUM);
+
+    res.json({ ...responseData, isSubscriber });
   } catch (error) {
     console.error('Error fetching products:', error);
     res.status(500).json({
@@ -89,12 +108,19 @@ exports.getFeaturedProducts = async (req, res) => {
   try {
     const { limit = 8 } = req.query;
     
+    // Check cache first
+    const cacheKey = `${CACHE_KEYS.PRODUCT_FEATURED}:${limit}`;
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, fromCache: true });
+    }
+
     const products = await Product.findFeatured(Number(limit));
     
-    res.json({
-      success: true,
-      products
-    });
+    const responseData = { success: true, products };
+    await Cache.set(cacheKey, responseData, TTL.MEDIUM);
+
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching featured products:', error);
     res.status(500).json({
@@ -114,12 +140,19 @@ exports.getDiscountedProducts = async (req, res) => {
   try {
     const { limit = 8 } = req.query;
     
+    // Check cache first
+    const cacheKey = `${CACHE_KEYS.PRODUCT_DISCOUNTED}:${limit}`;
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, fromCache: true });
+    }
+
     const products = await Product.findDiscounted(Number(limit));
     
-    res.json({
-      success: true,
-      products
-    });
+    const responseData = { success: true, products };
+    await Cache.set(cacheKey, responseData, TTL.MEDIUM);
+
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching discounted products:', error);
     res.status(500).json({
@@ -140,6 +173,13 @@ exports.getProductsByCategory = async (req, res) => {
     const { categoryId } = req.params;
     const { page = 1, limit = 12 } = req.query;
     
+    // Check cache first
+    const cacheKey = Cache.generateKey(CACHE_KEYS.PRODUCT_CATEGORY + categoryId + ':', { page, limit });
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, fromCache: true });
+    }
+
     const products = await Product.findByCategory(categoryId)
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
@@ -150,7 +190,7 @@ exports.getProductsByCategory = async (req, res) => {
       'status.active': true 
     });
     
-    res.json({
+    const responseData = {
       success: true,
       products,
       pagination: {
@@ -159,7 +199,11 @@ exports.getProductsByCategory = async (req, res) => {
         limit: Number(limit),
         pages: Math.ceil(total / Number(limit))
       }
-    });
+    };
+
+    await Cache.set(cacheKey, responseData, TTL.MEDIUM);
+
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching products by category:', error);
     res.status(500).json({
@@ -217,6 +261,14 @@ exports.getProductBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
     
+    // Check cache first
+    const cacheKey = `${CACHE_KEYS.PRODUCT}slug:${slug}`;
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      const isSubscriber = req.user && req.user.subscription && req.user.subscription.isActive;
+      return res.json({ ...cached, isSubscriber, fromCache: true });
+    }
+
     const product = await Product.findOne({
       slug,
       'status.active': true
@@ -232,11 +284,11 @@ exports.getProductBySlug = async (req, res) => {
     // Check if user has subscription to include subscription prices
     const isSubscriber = req.user && req.user.subscription && req.user.subscription.isActive;
     
-    res.json({
-      success: true,
-      product,
-      isSubscriber
-    });
+    // Cache without user-specific data
+    const responseData = { success: true, product };
+    await Cache.set(cacheKey, responseData, TTL.LONG);
+
+    res.json({ ...responseData, isSubscriber });
   } catch (error) {
     console.error('Error fetching product by slug:', error);
     res.status(500).json({
@@ -256,6 +308,14 @@ exports.getProductById = async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Check cache first
+    const cacheKey = `${CACHE_KEYS.PRODUCT}id:${id}`;
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      const isSubscriber = req.user && req.user.subscription && req.user.subscription.isActive;
+      return res.json({ ...cached, isSubscriber, fromCache: true });
+    }
+
     const product = await Product.findOne({
       _id: id,
       'status.active': true
@@ -271,11 +331,11 @@ exports.getProductById = async (req, res) => {
     // Check if user has subscription to include subscription prices
     const isSubscriber = req.user && req.user.subscription && req.user.subscription.isActive;
     
-    res.json({
-      success: true,
-      product,
-      isSubscriber
-    });
+    // Cache without user-specific data
+    const responseData = { success: true, product };
+    await Cache.set(cacheKey, responseData, TTL.LONG);
+
+    res.json({ ...responseData, isSubscriber });
   } catch (error) {
     console.error('Error fetching product by ID:', error);
     res.status(500).json({
@@ -370,6 +430,9 @@ exports.createProduct = async (req, res) => {
     
     // Save product
     await product.save();
+    
+    // Invalidate product caches
+    await Cache.invalidateProducts();
     
     res.status(201).json({
       success: true,
@@ -511,6 +574,9 @@ exports.updateProduct = async (req, res) => {
     // Save updated product
     await product.save();
     
+    // Invalidate product caches
+    await Cache.invalidateProduct(id);
+    
     res.json({
       success: true,
       message: 'Product updated successfully',
@@ -558,6 +624,9 @@ exports.deleteProduct = async (req, res) => {
     // Use deleteOne instead of deprecated remove()
     await Product.deleteOne({ _id: id });
     
+    // Invalidate product caches
+    await Cache.invalidateProducts();
+    
     res.json({
       success: true,
       message: 'Product deleted successfully'
@@ -600,6 +669,9 @@ exports.updateProductStatus = async (req, res) => {
         message: 'Product not found'
       });
     }
+    
+    // Invalidate product caches
+    await Cache.invalidateProduct(id);
     
     res.json({
       success: true,
@@ -645,6 +717,9 @@ exports.toggleFeatureProduct = async (req, res) => {
         message: 'Product not found'
       });
     }
+    
+    // Invalidate product caches
+    await Cache.invalidateProduct(id);
     
     res.json({
       success: true,
@@ -696,6 +771,9 @@ exports.addProductImages = async (req, res) => {
     }
     
     await product.save();
+    
+    // Invalidate product caches
+    await Cache.invalidateProduct(id);
     
     res.json({
       success: true,
@@ -750,6 +828,9 @@ exports.removeProductImage = async (req, res) => {
     // Remove from product
     product.images.splice(imageIndex, 1);
     await product.save();
+    
+    // Invalidate product caches
+    await Cache.invalidateProduct(id);
     
     res.json({
       success: true,

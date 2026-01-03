@@ -2,6 +2,7 @@ const Blog = require('../models/Blog');
 const slugify = require('slugify');
 const mongoose = require('mongoose');
 const s3Utils = require('../utils/s3Utils'); // s3 helpers (upload/delete)
+const { Cache, TTL, CACHE_KEYS } = require('../config/redisConfig');
  
 // helper to upload req.file (supports several s3Utils APIs)
 async function uploadReqFileToS3(file) {
@@ -86,6 +87,10 @@ exports.createBlog = async (req, res) => {
       status,
       publishedAt: status === 'published' ? (publishedAt || new Date()) : publishedAt
     });
+    
+    // Invalidate blog caches
+    await Cache.invalidateBlogs();
+    
     return res.status(201).json({ success: true, blog });
   } catch (error) {
     console.error('createBlog error', error);
@@ -135,6 +140,10 @@ exports.updateBlog = async (req, res) => {
  
     const blog = await Blog.findByIdAndUpdate(id, updates, { new: true });
     if (!blog) return res.status(404).json({ success: false, message: 'Blog not found' });
+    
+    // Invalidate blog caches
+    await Cache.invalidateBlog(id);
+    
     return res.json({ success: true, blog });
   } catch (error) {
     console.error('updateBlog error', error);
@@ -167,6 +176,10 @@ exports.deleteBlog = async (req, res) => {
     if (blog.featuredImage && (blog.featuredImage.public_id || blog.featuredImage.url)) {
       try { await deleteS3Key(blog.featuredImage.public_id || blog.featuredImage.url); } catch (e) { console.warn('Failed to delete blog image', e); }
     }
+    
+    // Invalidate blog caches
+    await Cache.invalidateBlogs();
+    
     return res.json({ success: true, message: 'Blog deleted' });
   } catch (error) {
     console.error('deleteBlog error', error);
@@ -200,11 +213,29 @@ exports.getBlogs = async (req, res) => {
     const skip = (page - 1) * limit;
     const q = req.query.q ? { $text: { $search: req.query.q } } : {};
     const filter = { status: 'published', ...q };
+    
+    // Check cache first (only for non-search queries)
+    const cacheKey = Cache.generateKey(CACHE_KEYS.BLOGS + 'list:', { page, limit, q: req.query.q || '' });
+    if (!req.query.q) {
+      const cached = await Cache.get(cacheKey);
+      if (cached) {
+        return res.json({ ...cached, fromCache: true });
+      }
+    }
+
     const [blogs, total] = await Promise.all([
       Blog.find(filter).sort({ publishedAt: -1, createdAt: -1 }).skip(skip).limit(limit).select('title slug excerpt publishedAt tags featuredImage author').lean(),
       Blog.countDocuments(filter)
     ]);
-    return res.json({ success: true, blogs, pagination: { total, page, limit, pages: Math.ceil(total / limit) } });
+    
+    const responseData = { success: true, blogs, pagination: { total, page, limit, pages: Math.ceil(total / limit) } };
+    
+    // Cache only non-search results
+    if (!req.query.q) {
+      await Cache.set(cacheKey, responseData, TTL.MEDIUM);
+    }
+    
+    return res.json(responseData);
   } catch (error) {
     console.error('getBlogs error', error);
     return res.status(500).json({ success: false, message: error.message });
@@ -214,9 +245,21 @@ exports.getBlogs = async (req, res) => {
 exports.getBlogBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
+    
+    // Check cache first
+    const cacheKey = `${CACHE_KEYS.BLOG}slug:${slug}`;
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, fromCache: true });
+    }
+
     const blog = await Blog.findOne({ slug, status: 'published' }).populate('author', 'name username').lean();
     if (!blog) return res.status(404).json({ success: false, message: 'Blog not found' });
-    return res.json({ success: true, blog });
+    
+    const responseData = { success: true, blog };
+    await Cache.set(cacheKey, responseData, TTL.LONG);
+    
+    return res.json(responseData);
   } catch (error) {
     console.error('getBlogBySlug error', error);
     return res.status(500).json({ success: false, message: error.message });
