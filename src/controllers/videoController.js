@@ -1,5 +1,6 @@
 const Video = require('../models/Video');
 const User = require('../models/User');
+const { Cache, TTL, CACHE_KEYS } = require('../config/redisConfig');
 
 /**
  * Admin: create video
@@ -17,6 +18,9 @@ exports.createVideo = async (req, res) => {
       active: Boolean(active),
       createdBy: req.user?.id
     });
+
+    // Invalidate video caches
+    await Cache.invalidateVideos();
 
     return res.status(201).json({ success: true, video });
   } catch (err) {
@@ -53,6 +57,10 @@ exports.deleteVideo = async (req, res) => {
     const video = await Video.findById(id);
     if (!video) return res.status(404).json({ success: false, message: 'Video not found' });
     await Video.findByIdAndDelete(id);
+    
+    // Invalidate video caches
+    await Cache.invalidateVideos();
+    
     return res.json({ success: true, message: 'Video deleted' });
   } catch (err) {
     console.error('deleteVideo error', err);
@@ -66,8 +74,19 @@ exports.deleteVideo = async (req, res) => {
  */
 exports.listVideos = async (req, res) => {
   try {
+    // Check cache first
+    const cacheKey = `${CACHE_KEYS.VIDEOS}active`;
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, fromCache: true });
+    }
+
     const videos = await Video.find({ active: true }).sort({ createdAt: -1 });
-    return res.json({ success: true, count: videos.length, videos });
+    
+    const responseData = { success: true, count: videos.length, videos };
+    await Cache.set(cacheKey, responseData, TTL.MEDIUM);
+    
+    return res.json(responseData);
   } catch (err) {
     console.error('listVideos error', err);
     return res.status(500).json({ success: false, message: err.message });

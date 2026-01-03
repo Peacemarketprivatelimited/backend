@@ -7,6 +7,7 @@ const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const connectDB = require('./src/config/Db');
 const logger = require('./src/utils/logger');
+const { initRedis, Cache } = require('./src/config/redisConfig');
 const adminRoutes = require('./src/routes/adminRoutes');
 const productRoutes = require('./src/routes/productRoutes');
 const categoryRoutes = require('./src/routes/categoryRoutes');
@@ -31,6 +32,13 @@ const app = express();
 
 // Connect to MongoDB
 connectDB();
+
+// Initialize Redis cache
+initRedis().then(() => {
+  logger.info('Redis cache initialized');
+}).catch((err) => {
+  logger.warn('Redis cache initialization failed - continuing without cache:', err.message);
+});
 
 app.set('trust proxy', 1); // Trust first proxy for rate limiting
 
@@ -113,6 +121,16 @@ app.get('/test', (req, res) => {
   res.status(200).json({"success": true, "message": "API is running successfully!" });
 });
 
+// Cache stats endpoint (admin only - for monitoring)
+app.get('/api/admin/cache/stats', async (req, res) => {
+  try {
+    const stats = await Cache.getStats();
+    res.json({ success: true, stats });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // Handle 404 routes
 app.use('*', (req, res) => {
   res.status(404).json({
@@ -145,4 +163,17 @@ process.on('unhandledRejection', (err) => {
   console.error('Unhandled Rejection! 💥 Shutting down...');
   // Close server & exit process
   process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM received. Shutting down gracefully...');
+  await Cache.disconnect();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  logger.info('SIGINT received. Shutting down gracefully...');
+  await Cache.disconnect();
+  process.exit(0);
 });
