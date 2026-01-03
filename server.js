@@ -3,7 +3,6 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const morgan = require('morgan');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const connectDB = require('./src/config/Db');
@@ -12,7 +11,17 @@ const adminRoutes = require('./src/routes/adminRoutes');
 const productRoutes = require('./src/routes/productRoutes');
 const categoryRoutes = require('./src/routes/categoryRoutes');
 const jazzcashRoutes = require('./src/routes/jazzcashRoutes');
-const blogRoutes = require('./src/routes/blogRoutes'); // add this
+const blogRoutes = require('./src/routes/blogRoutes');
+
+// Import rate limiters
+const {
+  globalLimiter,
+  authLimiter,
+  adminLimiter,
+  paymentLimiter,
+  orderLimiter,
+  methodBasedLimiter
+} = require('./src/config/rateLimitConfig');
 
 // Load environment variables
 dotenv.config();
@@ -23,9 +32,6 @@ const app = express();
 // Connect to MongoDB
 connectDB();
 
-//testing ci/cd
-
-
 app.set('trust proxy', 1); // Trust first proxy for rate limiting
 
 // Security middleware
@@ -33,15 +39,8 @@ app.use(helmet()); // Set security HTTP headers
 app.use(mongoSanitize()); // Sanitize inputs against NoSQL query injection
 app.use(xss()); // Sanitize inputs against XSS attacks
 
-// Rate limiting (environment-aware)
-const isDevelopment = process.env.NODE_ENV === 'development';
-
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isDevelopment ? 1000 : 100, // 1000 for dev, 100 for production
-  message: 'Too many requests from this IP, please try again later'
-});
-app.use('/api', limiter);
+// Apply global rate limiter first (safety net)
+app.use(globalLimiter);
 
 // Body parser middleware
 app.use(express.json({ limit: '10kb' }));
@@ -63,9 +62,25 @@ if (environment === 'development') {
 const userRoutes = require('./src/routes/userRoutes');
 const orderRoutes = require('./src/routes/orderRoutes');
 
-// Import other routes as they are created
-// const productRoutes = require('./src/routes/productRoutes');
-// const subscriptionRoutes = require('./src/routes/subscriptionRoutes');
+// ============ APPLY ROUTE-SPECIFIC LIMITERS ============
+
+// Auth routes - strictest limiting (applied before general user routes)
+app.use('/api/users/login', authLimiter);
+app.use('/api/users/register', authLimiter);
+app.use('/api/users/forgot-password', authLimiter);
+app.use('/api/users/reset-password', authLimiter);
+
+// Payment routes - strict limiting
+app.use('/api/jazzcash', paymentLimiter);
+
+// Order routes - moderate limiting
+app.use('/api/orders', orderLimiter);
+
+// Admin routes - admin specific limiting
+app.use('/api/admin', adminLimiter, adminRoutes);
+
+// Apply method-based limiters for remaining API routes
+app.use('/api', methodBasedLimiter);
 
 // Use routes
 app.use('/api/users', userRoutes);
@@ -75,14 +90,6 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/jazzcash', jazzcashRoutes);
 app.use('/api/blogs', blogRoutes);
 app.use('/api/videos', require('./src/routes/videoRoutes'));
-
-const adminLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: isDevelopment ? 500 : 30, // 500 for dev, 30 for production
-    message: 'Too many admin requests from this IP, please try again later'
-  });
-  
-  app.use('/api/admin', adminLimiter, adminRoutes);
 
 // Subscription routes
 const subscriptionRoutes = require('./src/routes/subscriptionRoutes');
