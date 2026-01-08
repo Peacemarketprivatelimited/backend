@@ -2,6 +2,7 @@ const Category = require('../models/Category');
 const Product = require('../models/Product');
 const { uploadToS3, deleteFromS3 } = require('../utils/s3Utils');
 const mongoose = require('mongoose');
+const { Cache, TTL, CACHE_KEYS } = require('../config/redisConfig');
 
 /**
  * @desc    Get all categories
@@ -11,6 +12,13 @@ const mongoose = require('mongoose');
 exports.getAllCategories = async (req, res) => {
   try {
     const { active } = req.query;
+    
+    // Check cache first
+    const cacheKey = Cache.generateKey(CACHE_KEYS.CATEGORIES + 'list:', { active });
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, fromCache: true });
+    }
     
     let query = {};
     
@@ -24,10 +32,10 @@ exports.getAllCategories = async (req, res) => {
     const categories = await Category.find(query)
       .sort({ order: 1, name: 1 });
     
-    res.json({
-      success: true,
-      categories
-    });
+    const responseData = { success: true, categories };
+    await Cache.set(cacheKey, responseData, TTL.LONG);
+
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching categories:', error);
     res.status(500).json({
@@ -47,12 +55,19 @@ exports.getFeaturedCategories = async (req, res) => {
   try {
     const { limit = 5 } = req.query;
     
+    // Check cache first
+    const cacheKey = `${CACHE_KEYS.CATEGORY_FEATURED}:${limit}`;
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, fromCache: true });
+    }
+
     const categories = await Category.findFeatured(Number(limit));
     
-    res.json({
-      success: true,
-      categories
-    });
+    const responseData = { success: true, categories };
+    await Cache.set(cacheKey, responseData, TTL.LONG);
+
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching featured categories:', error);
     res.status(500).json({
@@ -72,6 +87,13 @@ exports.getCategoryBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
     
+    // Check cache first
+    const cacheKey = `${CACHE_KEYS.CATEGORY}slug:${slug}`;
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, fromCache: true });
+    }
+
     const category = await Category.findOne({ slug, active: true });
     
     if (!category) {
@@ -81,10 +103,10 @@ exports.getCategoryBySlug = async (req, res) => {
       });
     }
     
-    res.json({
-      success: true,
-      category
-    });
+    const responseData = { success: true, category };
+    await Cache.set(cacheKey, responseData, TTL.LONG);
+
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching category by slug:', error);
     res.status(500).json({
@@ -104,6 +126,13 @@ exports.getCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Check cache first
+    const cacheKey = `${CACHE_KEYS.CATEGORY}id:${id}`;
+    const cached = await Cache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, fromCache: true });
+    }
+
     const category = await Category.findById(id);
     
     if (!category) {
@@ -113,10 +142,10 @@ exports.getCategoryById = async (req, res) => {
       });
     }
     
-    res.json({
-      success: true,
-      category
-    });
+    const responseData = { success: true, category };
+    await Cache.set(cacheKey, responseData, TTL.LONG);
+
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching category by ID:', error);
     res.status(500).json({
@@ -177,6 +206,9 @@ exports.createCategory = async (req, res) => {
     
     // Save category
     await category.save();
+    
+    // Invalidate category caches
+    await Cache.invalidateCategories();
     
     res.status(201).json({
       success: true,
@@ -267,6 +299,9 @@ exports.updateCategory = async (req, res) => {
     // Save changes
     await category.save();
     
+    // Invalidate category caches
+    await Cache.invalidateCategory(id);
+    
     res.json({
       success: true,
       message: 'Category updated successfully',
@@ -318,6 +353,9 @@ exports.deleteCategory = async (req, res) => {
     // Delete category
     await Category.findByIdAndDelete(id);
 
+    // Invalidate category caches
+    await Cache.invalidateCategories();
+
     res.json({
       success: true,
       message: 'Category deleted successfully'
@@ -364,6 +402,9 @@ exports.updateCategoryStatus = async (req, res) => {
         message: 'Category not found'
       });
     }
+    
+    // Invalidate category caches
+    await Cache.invalidateCategory(id);
     
     res.json({
       success: true,
@@ -413,6 +454,9 @@ exports.toggleFeatureCategory = async (req, res) => {
       });
     }
     
+    // Invalidate category caches
+    await Cache.invalidateCategory(id);
+    
     res.json({
       success: true,
       message: `Category ${featured ? 'marked as featured' : 'removed from featured'} successfully`,
@@ -460,6 +504,9 @@ exports.updateCategoryOrder = async (req, res) => {
         message: 'Category not found'
       });
     }
+    
+    // Invalidate category caches
+    await Cache.invalidateCategory(id);
     
     res.json({
       success: true,
@@ -518,6 +565,9 @@ exports.updateCategoryDiscount = async (req, res) => {
         message: 'Category not found'
       });
     }
+    
+    // Invalidate category caches
+    await Cache.invalidateCategory(id);
     
     res.json({
       success: true,
