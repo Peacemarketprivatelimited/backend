@@ -206,6 +206,41 @@ exports.getAllBlogsAdmin = async (req, res) => {
 };
 
 // Public list (published only)
+// exports.getBlogs = async (req, res) => {
+//   try {
+//     const page = Math.max(1, parseInt(req.query.page) || 1);
+//     const limit = Math.min(100, parseInt(req.query.limit) || 10);
+//     const skip = (page - 1) * limit;
+//     const q = req.query.q ? { $text: { $search: req.query.q } } : {};
+//     const filter = { status: 'published', ...q };
+//     const [blogs, total] = await Promise.all([
+//       Blog.find(filter).sort({ publishedAt: -1, createdAt: -1 }).skip(skip).limit(limit).select('title slug excerpt publishedAt tags featuredImage author').lean(),
+//       Blog.countDocuments(filter)
+//     ]);
+//     // console.log(blogs)
+//     return res.json({ success: true, blogs, pagination: { total, page, limit, pages: Math.ceil(total / limit) } });
+//   } catch (error) {
+//     console.error('getBlogs error', error);
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
+// exports.getBlogBySlug = async (req, res) => {
+//   try {
+//     const { slug } = req.params;
+//     const blog = await Blog.findOne({ slug, status: 'published' }).populate('author', 'name username').lean();
+//     if (!blog) return res.status(404).json({ success: false, message: 'Blog not found' });
+//     return res.json({ success: true, blog });
+//   } catch (error) {
+//     console.error('getBlogBySlug error', error);
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
+
+// ...existing code...
+
+// Public list (published only)
 exports.getBlogs = async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -224,7 +259,12 @@ exports.getBlogs = async (req, res) => {
     }
 
     const [blogs, total] = await Promise.all([
-      Blog.find(filter).sort({ publishedAt: -1, createdAt: -1 }).skip(skip).limit(limit).select('title slug excerpt publishedAt tags featuredImage author').lean(),
+      Blog.find(filter)
+        .sort({ publishedAt: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('title slug excerpt content publishedAt tags featuredImage author') // Added 'content' here
+        .lean(),
       Blog.countDocuments(filter)
     ]);
     
@@ -265,3 +305,5 @@ exports.getBlogBySlug = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// ...existing code...
